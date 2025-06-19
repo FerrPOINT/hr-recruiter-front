@@ -13,17 +13,12 @@ const MOCK_QUESTIONS = [
 // Моковые сообщения для приветствия и инструкций
 const INTRO_MESSAGES = [
   { from: 'ai', text: 'Привет 👋' },
-  { from: 'ai', text: 'Я — Ксения, твой виртуальный интервьюер.' },
+  { from: 'ai', text: 'Я твой виртуальный интервьюер.' },
   { from: 'ai', text: 'Я задам тебе несколько вопросов. Для ответа используй микрофон. Давай проверим, что он работает.' },
   { from: 'ai', text: 'Нажми кнопку «Тест микрофона», чтобы проверить микрофон.' },
 ];
 
 const MIC_TEST_DURATION = 5; // секунд для теста микрофона
-// Задержка между intro-сообщениями пропорциональна длине текста (40 мс на символ)
-function getIntroDelay(text: string): number {
-  // Средняя скорость чтения ≈ 25 символов/сек (40 мс на символ)
-  return text.length * 40;
-}
 
 // Моки данных приглашения
 const INVITE = {
@@ -56,26 +51,37 @@ const InterviewSession: React.FC = () => {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const [showInvite, setShowInvite] = useState(true);
   const [consent, setConsent] = useState(false);
+  const [showFinalBlock, setShowFinalBlock] = useState(false);
 
   // Sleep-функция
   function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Асинхронно показываем intro-сообщения по одному
-  useEffect(() => {
-    if (step !== 'intro' || messages.length > 0) return;
+  // Добавляет сообщения по одному с задержкой 2 секунды между каждым
+  async function pushMessagesWithDelay(msgsArr: {from: string, text: string}[]) {
+    for (const msg of msgsArr) {
+      setMessages(msgs => [...msgs, msg]);
+      await sleep(2000);
+    }
+  }
+
+  // Запуск intro-сообщений только после нажатия "Начать"
+  const startIntro = () => {
+    setStep('intro');
+    setMessages([]);
+    setIntroDone(false);
     let cancelled = false;
     (async () => {
       for (let i = 0; i < INTRO_MESSAGES.length; i++) {
         if (cancelled) break;
         setMessages(msgs => [...msgs, INTRO_MESSAGES[i]]);
-        await sleep(getIntroDelay(INTRO_MESSAGES[i].text));
+        await sleep(2000);
       }
       if (!cancelled) setIntroDone(true);
     })();
     return () => { cancelled = true; };
-  }, [step]);
+  };
 
   // Автоскролл вниз
   useEffect(() => {
@@ -110,24 +116,25 @@ const InterviewSession: React.FC = () => {
   // Завершение теста микрофона
   const handleStopMicTest = () => {
     setIsRecording(false);
-    setTimeout(() => {
-      setMessages(msgs => [
-        ...msgs,
+    (async () => {
+      await sleep(500);
+      await pushMessagesWithDelay([
         { from: 'user', text: 'Раз-раз. Тест микрофона.' },
-        { from: 'ai', text: 'Всё в порядке! Я слышу тебя хорошо. Когда будешь готов — нажми кнопку ниже, чтобы начать интервью.' }
+        { from: 'ai', text: 'Всё в порядке! Я слышу тебя хорошо. Когда будешь готов — нажми кнопку ниже, чтобы начать интервью.' },
+        { from: 'ai', text: 'Как отвечать на вопросы: внимательно слушай, нажимай «Записать ответ», говори, затем отправляй.' }
       ]);
       setStep('mic-test-done');
-    }, 500);
+    })();
   };
 
   // Начать интервью
   const handleStartInterview = () => {
     setStep('question');
-    setMessages(msgs => [
-      ...msgs,
-      { from: 'ai', text: 'Как отвечать на вопросы: внимательно слушай, нажимай «Записать ответ», говори, затем отправляй.' },
-      { from: 'ai', text: `Вопрос 1 из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[0]}` }
-    ]);
+    (async () => {
+      await pushMessagesWithDelay([
+        { from: 'ai', text: `Вопрос 1 из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[0]}` }
+      ]);
+    })();
   };
 
   // Мок: начать запись
@@ -146,29 +153,25 @@ const InterviewSession: React.FC = () => {
     setTimeout(() => {
       setIsTranscribing(false);
       setUserText('Мой ответ на вопрос...');
-      setMessages(msgs => [
-        ...msgs,
-        { from: 'user', text: 'Мой ответ на вопрос...' },
-        { from: 'ai', text: 'Ответ получен. Переходим к следующему вопросу.' }
-      ]);
-      // Следующий вопрос или финал
-      if (currentQuestion + 1 < MOCK_QUESTIONS.length) {
-        setTimeout(() => {
+      (async () => {
+        await pushMessagesWithDelay([
+          { from: 'user', text: 'Мой ответ на вопрос...' },
+          { from: 'ai', text: 'Ответ получен. Переходим к следующему вопросу.' }
+        ]);
+        // Следующий вопрос или финал
+        if (currentQuestion + 1 < MOCK_QUESTIONS.length) {
           setCurrentQuestion(q => q + 1);
-          setMessages(msgs => [
-            ...msgs,
+          await pushMessagesWithDelay([
             { from: 'ai', text: `Вопрос ${currentQuestion + 2} из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[currentQuestion + 1]}` }
           ]);
-        }, 1000);
-      } else {
-        setTimeout(() => {
+        } else {
           setStep('final');
-          setMessages(msgs => [
-            ...msgs,
+          await pushMessagesWithDelay([
             { from: 'ai', text: 'Спасибо! Интервью завершено. Результаты будут отправлены рекрутеру.' }
           ]);
-        }, 1200);
-      }
+          setShowFinalBlock(true);
+        }
+      })();
     }, 1500);
   };
 
@@ -202,7 +205,10 @@ const InterviewSession: React.FC = () => {
               className="btn-primary w-full h-12 min-h-[48px] mt-4"
               disabled={!consent}
               style={{ opacity: consent ? 1 : 0.6 }}
-              onClick={() => setShowInvite(false)}
+              onClick={() => {
+                setShowInvite(false);
+                startIntro();
+              }}
             >
               Начать
             </button>
@@ -255,8 +261,16 @@ const InterviewSession: React.FC = () => {
             {isTranscribing && (
               <div className="text-center text-gray-500 text-base mb-2">Транскрибация ответа...</div>
             )}
-            {step === 'final' && (
-              <div className="text-center text-gray-500 text-base mb-2">Интервью завершено</div>
+            {step === 'final' && showFinalBlock && (
+              <div className="flex flex-col items-center gap-2 w-full">
+                <CheckCircle className="h-8 w-8 text-green-500" />
+                <div className="text-lg font-bold text-gray-900">Спасибо за интервью!</div>
+                <div className="text-gray-500 text-sm text-center max-w-xs">
+                  Ваши ответы успешно отправлены рекрутеру. После проверки результатов с вами свяжутся по указанным контактам.<br />
+                  Спасибо за участие и удачи в дальнейшем отборе!
+                </div>
+                <div className="text-gray-400 text-xs mt-2">Вы можете закрыть страницу.</div>
+              </div>
             )}
             {step === 'intro' && introDone && (
               <button className="btn-primary w-full h-12 min-h-[48px]" onClick={handleMicTest}>Тест микрофона</button>
@@ -285,17 +299,6 @@ const InterviewSession: React.FC = () => {
               <button className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-primary-200 text-primary-900 px-4 cursor-not-allowed" style={{maxWidth:'100%'}} disabled>
                 <Loader2 className="animate-spin h-6 w-6" style={{color: 'var(--wmt-orange)'}} /> Транскрибация...
               </button>
-            )}
-            {step === 'final' && (
-              <div className="flex flex-col items-center gap-2 w-full">
-                <CheckCircle className="h-8 w-8 text-green-500" />
-                <div className="text-lg font-bold text-gray-900">Спасибо за интервью!</div>
-                <div className="text-gray-500 text-sm text-center max-w-xs">
-                  Ваши ответы успешно отправлены рекрутеру. После проверки результатов с вами свяжутся по указанным контактам.<br />
-                  Спасибо за участие и удачи в дальнейшем отборе!
-                </div>
-                <div className="text-gray-400 text-xs mt-2">Вы можете закрыть страницу.</div>
-              </div>
             )}
           </div>
         </div>

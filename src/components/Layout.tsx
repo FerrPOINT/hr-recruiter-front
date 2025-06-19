@@ -83,20 +83,8 @@ const Layout: React.FC = () => {
         <div className="p-4 space-y-3 border-t border-gray-100">
           {/* Тариф/статистика (мок) */}
           <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 mb-2">
-            <div className="mb-1">{MOCK_TARIFF.interviewsLeft} собеседований осталось до {MOCK_TARIFF.until}</div>
-            <Link to="/tariff" className="text-primary-600 hover:underline">Управлять тарифом →</Link>
-          </div>
-          {/* Язык */}
-          <div className="flex items-center gap-2 text-xs text-gray-700">
-            <Globe className="h-4 w-4 text-gray-400" />
-            {MOCK_USER.language}
-          </div>
-          {/* Email пользователя (мок) */}
-          <div className="flex items-center gap-2 text-xs text-gray-700">
-            <div className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500">
-              F
-            </div>
-            {MOCK_USER.email}
+            <div className="mb-1">Лимит собеседований истекает: осталось {MOCK_TARIFF.interviewsLeft} до {MOCK_TARIFF.until}</div>
+            <Link to="/tariff" className="text-primary-600 hover:underline">Настройки тарифа →</Link>
           </div>
         </div>
       </aside>
