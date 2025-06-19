@@ -1,0 +1,55 @@
+[
+  {
+    "id": 1,
+    "title": "Бухгалтер",
+    "topics": ["Финансовый учет", "Налоговое законодательство", "Внимание к деталям"],
+    "minScore": 5.0,
+    "avgScore": 0.0,
+    "createdAt": "2024-06-19",
+    "candidates": [
+      { "name": "Иван Петров", "status": "ожидает", "score": null },
+      { "name": "Мария Сидорова", "status": "провал", "score": 4.2 },
+      { "name": "Анна Иванова", "status": "успешно", "score": 8.5 }
+    ],
+    "description": "Ведение бухгалтерии, сдача отчетности, контроль налогов.",
+    "publicLink": "https://цьеюсщь/public-interview/abc123",
+    "emailConfirm": true,
+    "phoneRequired": false
+  },
+  {
+    "id": 2,
+    "title": "Go разработчик",
+    "topics": ["Go", "Конкурентность", "Обработка ошибок"],
+    "minScore": 5.0,
+    "avgScore": 0.0,
+    "createdAt": "2024-06-18",
+    "candidates": [
+      { "name": "Олег Валерьев", "status": "завершено", "score": 7.8 },
+      { "name": "Петр Петров", "status": "ожидает", "score": null },
+      { "name": "Алексей Смирнов", "status": "успешно", "score": 9.1 },
+      { "name": "Екатерина Орлова", "status": "провал", "score": 3.7 },
+      { "name": "Дмитрий Кузнецов", "status": "ожидает", "score": null },
+      { "name": "Сергей Иванов", "status": "успешно", "score": 8.8 },
+      { "name": "Марина Лебедева", "status": "провал", "score": 4.0 },
+      { "name": "Владимир Соколов", "status": "завершено", "score": 7.2 },
+      { "name": "Андрей Попов", "status": "ожидает", "score": null },
+      { "name": "Ольга Павлова", "status": "успешно", "score": 8.0 },
+      { "name": "Ирина Васильева", "status": "провал", "score": 2.9 },
+      { "name": "Максим Волков", "status": "ожидает", "score": null },
+      { "name": "Татьяна Морозова", "status": "успешно", "score": 9.5 },
+      { "name": "Григорий Фомин", "status": "провал", "score": 3.2 },
+      { "name": "Виктория Белова", "status": "ожидает", "score": null },
+      { "name": "Роман Киселёв", "status": "успешно", "score": 8.3 },
+      { "name": "Светлана Громова", "status": "провал", "score": 4.5 },
+      { "name": "Евгений Мельников", "status": "завершено", "score": 7.9 },
+      { "name": "Анастасия Крылова", "status": "ожидает", "score": null },
+      { "name": "Валерий Соловьёв", "status": "успешно", "score": 8.7 },
+      { "name": "Юлия Корнилова", "status": "провал", "score": 3.8 },
+      { "name": "Павел Ефимов", "status": "ожидает", "score": null }
+    ],
+    "description": "Разработка микросервисов на Go, работа с очередями, оптимизация.",
+    "publicLink": "https://цьеюсщь/public-interview/def456",
+    "emailConfirm": true,
+    "phoneRequired": false
+  }
+] 
