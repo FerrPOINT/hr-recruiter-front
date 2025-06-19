@@ -197,33 +197,36 @@ const VacancyCreate: React.FC = () => {
             {/* Условия */}
             <div className="mt-2">
               <div className="font-semibold text-gray-900 mb-3 text-lg">Условия</div>
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex flex-col gap-2 flex-1">
-                  <div className="text-xs text-gray-500 mb-1">Минимальная оценка</div>
-                  <div className="flex gap-1 flex-wrap">
+              <div className="flex flex-col gap-6">
+                {/* Минимальная оценка */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs text-gray-500 mb-1 font-semibold">Минимальная оценка</label>
+                  <div className="flex gap-2 flex-wrap">
                     {[1,2,3,4,5,6,7,8,9,10].map(n => (
-                      <button key={n} type="button" className={`w-8 h-8 rounded-lg text-sm font-bold ${form.minScore===n ? 'bg-primary-200 text-primary-900' : 'bg-gray-100 text-gray-500'}`} onClick={()=>setForm(f=>({...f, minScore:n}))}>{n}</button>
+                      <button key={n} type="button" className={`w-9 h-9 rounded-lg text-base font-bold transition-colors duration-150 border ${form.minScore===n ? 'bg-primary-200 text-primary-900 border-primary-400 shadow' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-primary-50'} `} onClick={()=>setForm(f=>({...f, minScore:n}))}>{n}</button>
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 flex-1">
-                  <div className="text-xs text-gray-500 mb-1">Время на ответ</div>
-                  <div className="flex gap-1 flex-wrap">
+                {/* Время на ответ */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs text-gray-500 mb-1 font-semibold">Время на ответ</label>
+                  <div className="flex gap-2 flex-wrap">
                     {[60,90,120,150,180,210,240,300].map(sec => (
-                      <button key={sec} type="button" className={`px-3 py-1 rounded-lg text-xs font-semibold ${form.answerTime===sec ? 'bg-primary-200 text-primary-900' : 'bg-gray-100 text-gray-500'}`} onClick={()=>setForm(f=>({...f, answerTime:sec}))}>{Math.floor(sec/60)} мин{sec%60 ? ' '+sec%60+'с' : ''}</button>
+                      <button key={sec} type="button" className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors duration-150 border ${form.answerTime===sec ? 'bg-primary-200 text-primary-900 border-primary-400 shadow' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-primary-50'} `} onClick={()=>setForm(f=>({...f, answerTime:sec}))}>{Math.floor(sec/60)} мин{sec%60 ? ' '+sec%60+'с' : ''}</button>
                     ))}
                   </div>
                 </div>
-                <div className="flex flex-col gap-2 flex-1">
-                  <div className="text-xs text-gray-500 mb-1">Уровень</div>
-                  <div className="flex gap-1 flex-wrap">
+                {/* Уровень */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs text-gray-500 mb-1 font-semibold">Уровень</label>
+                  <div className="flex gap-2 flex-wrap">
                     {['junior','middle','senior','lead'].map(lvl => (
-                      <button key={lvl} type="button" className={`px-3 py-1 rounded-lg text-xs font-semibold ${form.level===lvl ? 'bg-primary-200 text-primary-900' : 'bg-gray-100 text-gray-500'}`} onClick={()=>setForm(f=>({...f, level:lvl}))}>{lvl.charAt(0).toUpperCase()+lvl.slice(1)}</button>
+                      <button key={lvl} type="button" className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition-colors duration-150 border ${form.level===lvl ? 'bg-primary-200 text-primary-900 border-primary-400 shadow' : 'bg-gray-100 text-gray-500 border-gray-200 hover:bg-primary-50'} `} onClick={()=>setForm(f=>({...f, level:lvl}))}>{lvl}</button>
                     ))}
                   </div>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-4 mt-4">
+              <div className="flex flex-wrap gap-4 mt-6">
                 <label className="flex items-center gap-2 text-xs text-gray-700">
                   <input type="checkbox" name="saveAudio" checked={form.saveAudio} onChange={handleChange} />
                   Сохранять аудио

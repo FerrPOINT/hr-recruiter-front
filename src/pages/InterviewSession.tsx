@@ -90,6 +90,13 @@ const InterviewSession: React.FC = () => {
     }
   }, [messages]);
 
+  // Скролл вниз при появлении финального блока
+  useEffect(() => {
+    if (showFinalBlock && chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [showFinalBlock]);
+
   // Таймер записи (универсальный для mic-test и question)
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -175,6 +182,13 @@ const InterviewSession: React.FC = () => {
     }, 1500);
   };
 
+  // Кнопка 'Записать ответ' доступна только после появления вопроса в чате
+  const currentQuestionText = `Вопрос ${currentQuestion + 1} из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[currentQuestion]}`;
+  const lastMessage = messages[messages.length - 1];
+  const canRecordAnswer = step === 'question'
+    && lastMessage && lastMessage.from === 'ai' && lastMessage.text === currentQuestionText
+    && !isRecording && !isTranscribing;
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#f0f3ff] to-[#e6eaff] py-4">
       {/* Фирменный логотип и помощь */}
@@ -253,7 +267,9 @@ const InterviewSession: React.FC = () => {
               <div className="text-center text-gray-500 text-base mb-2">Тест микрофона завершён</div>
             )}
             {step === 'question' && !isRecording && !isTranscribing && (
-              <div className="text-center text-gray-500 text-base mb-2">Готовы записать ответ?</div>
+              <div className="text-center text-gray-500 text-base mb-2">
+                {canRecordAnswer ? 'Готовы записать ответ?' : 'Ожидаем вопрос'}
+              </div>
             )}
             {isRecording && step === 'question' && (
               <div className="text-center text-gray-500 text-base mb-2">Идёт запись... Говорите!</div>
@@ -284,8 +300,11 @@ const InterviewSession: React.FC = () => {
             {step === 'mic-test-done' && (
               <button className="btn-primary w-full h-12 min-h-[48px]" onClick={handleStartInterview}>Продолжить</button>
             )}
-            {step === 'question' && !isRecording && !isTranscribing && (
-              <button className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-green-500 hover:bg-green-600 text-white px-4" style={{maxWidth:'100%'}} onClick={handleStartRecording}>
+            {canRecordAnswer && (
+              <button
+                className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-green-500 hover:bg-green-600 text-white px-4"
+                style={{maxWidth:'100%'}} onClick={handleStartRecording}
+              >
                 <Mic className="h-5 w-5 mr-2" /> Записать ответ
               </button>
             )}
