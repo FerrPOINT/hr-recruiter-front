@@ -28,7 +28,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "generate:api": "openapi-generator-cli generate -i api/openapi.yaml -g typescript-axios -o src/client --additional-properties=supportsES6=true,withSeparateModelsAndApi=true,apiPackage=apis,modelPackage=models,enumPropertyNaming=original,modelPropertyNaming=original,typescriptThreePlus=true,withoutPrefixEnums=true"
   },
   "eslintConfig": {
     "extends": [
@@ -49,6 +50,7 @@
     ]
   },
   "devDependencies": {
+    "@openapitools/openapi-generator-cli": "^2.20.2",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "autoprefixer": "^10.4.16",
