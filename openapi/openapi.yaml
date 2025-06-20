@@ -1,0 +1,717 @@
+openapi: 3.1.0
+info:
+  title: HR Recruiter API
+  description: API для HR-платформы автоматизированных собеседований.
+  version: 1.0.0
+servers:
+  - url: https://api.example.com
+    description: Продакшн
+  - url: http://localhost:3001
+    description: Локальный сервер
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Vacancy:
+      type: object
+      properties:
+        id:
+          type: integer
+        title:
+          type: string
+        topics:
+          type: array
+          items:
+            type: string
+        language:
+          type: string
+          example: Русский
+        showOtherLang:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        minScore:
+          type: number
+        inviteNext:
+          type: boolean
+        answerTime:
+          type: integer
+          description: Время на ответ в секундах
+        level:
+          type: string
+          enum: [junior, middle, senior, lead]
+        saveAudio:
+          type: boolean
+        saveVideo:
+          type: boolean
+        randomOrder:
+          type: boolean
+        description:
+          type: string
+        questionType:
+          type: string
+        questionsCount:
+          type: integer
+        checkType:
+          type: string
+        createdAt:
+          type: string
+          format: date
+        avgScore:
+          type: number
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candidate'
+      required: [title, topics, minScore, answerTime, level]
+    Candidate:
+      type: object
+      properties:
+        id:
+          type: integer
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        status:
+          type: string
+          enum: [pending, in_progress, success, fail, completed]
+        score:
+          type: number
+      required: [firstName, email]
+    Interview:
+      type: object
+      properties:
+        id:
+          type: integer
+        candidate:
+          $ref: '#/components/schemas/Candidate'
+        vacancy:
+          $ref: '#/components/schemas/Vacancy'
+        status:
+          type: string
+          enum: [scheduled, in_progress, completed, cancelled]
+        scheduledDate:
+          type: string
+          format: date-time
+        score:
+          type: number
+      required: [candidate, vacancy, status]
+    Report:
+      type: object
+      properties:
+        id:
+          type: integer
+        candidate:
+          $ref: '#/components/schemas/Candidate'
+        vacancy:
+          $ref: '#/components/schemas/Vacancy'
+        score:
+          type: number
+        date:
+          type: string
+          format: date
+        status:
+          type: string
+      required: [candidate, vacancy, score, date]
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+      required: [email]
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required: [email, password]
+    LoginResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+  Error:
+    type: object
+    properties:
+      message:
+        type: string
+  TeamMember:
+    type: object
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+      role:
+        type: string
+      email:
+        type: string
+        format: email
+    required: [name, email]
+  Branding:
+    type: object
+    properties:
+      logoUrl:
+        type: string
+        format: uri
+      primaryColor:
+        type: string
+      secondaryColor:
+        type: string
+  ArchiveItem:
+    type: object
+    properties:
+      id:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+        enum: [vacancy, interview]
+      archivedAt:
+        type: string
+        format: date
+  Invite:
+    type: object
+    properties:
+      id:
+        type: integer
+      vacancyId:
+        type: integer
+      candidateEmail:
+        type: string
+        format: email
+      token:
+        type: string
+      status:
+        type: string
+        enum: [pending, in_progress, completed, expired]
+paths:
+  /auth/login:
+    post:
+      summary: Авторизация
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Неверные учетные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account:
+    get:
+      summary: Получить данные текущего пользователя
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Профиль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    put:
+      summary: Обновить данные пользователя
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+      responses:
+        '200':
+          description: Обновленный профиль
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /vacancies:
+    get:
+      summary: Список вакансий
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Успешно
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Vacancy'
+    post:
+      summary: Создать вакансию
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vacancy'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vacancy'
+  /vacancies/{vacancyId}:
+    parameters:
+      - in: path
+        name: vacancyId
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Получить вакансию
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Вакансия
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vacancy'
+    put:
+      summary: Обновить вакансию
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Vacancy'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Vacancy'
+    delete:
+      summary: Удалить вакансию
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалено
+  /vacancies/{vacancyId}/candidates:
+    get:
+      summary: Кандидаты вакансии
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vacancyId
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Список кандидатов
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Candidate'
+    post:
+      summary: Добавить кандидата
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: vacancyId
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Candidate'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Candidate'
+  /vacancies/{vacancyId}/candidates/{candidateId}:
+    parameters:
+      - in: path
+        name: vacancyId
+        required: true
+        schema:
+          type: integer
+      - in: path
+        name: candidateId
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Получить кандидата
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Кандидат
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Candidate'
+    put:
+      summary: Обновить кандидата
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Candidate'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Candidate'
+    delete:
+      summary: Удалить кандидата
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалено
+  /interviews:
+    get:
+      summary: Список собеседований
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Успешно
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Interview'
+    post:
+      summary: Создать собеседование
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Interview'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Interview'
+  /interviews/{interviewId}:
+    parameters:
+      - in: path
+        name: interviewId
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Получить собеседование
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Собеседование
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Interview'
+    put:
+      summary: Обновить собеседование
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Interview'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Interview'
+    delete:
+      summary: Удалить собеседование
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалено
+  /reports:
+    get:
+      summary: Получить отчеты
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Отчеты
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Report'
+  /reports/{reportId}:
+    parameters:
+      - in: path
+        name: reportId
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Получить отчет
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Отчет
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+  /stats:
+    get:
+      summary: Общая статистика
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Статистика
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  interviewsTotal:
+                    type: integer
+                  vacanciesActive:
+                    type: integer
+                  avgScore:
+                    type: number
+                  candidatesInProgress:
+                    type: integer
+
+  /team:
+    get:
+      summary: Список участников команды
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Участники
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamMember'
+    post:
+      summary: Добавить участника
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+      responses:
+        '201':
+          description: Создано
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+
+  /team/{memberId}:
+    parameters:
+      - in: path
+        name: memberId
+        required: true
+        schema:
+          type: integer
+    get:
+      summary: Получить участника
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Участник
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+    put:
+      summary: Обновить участника
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+    delete:
+      summary: Удалить участника
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: Удалено
+
+  /branding:
+    get:
+      summary: Получить настройки бренда
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Настройки
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Branding'
+    put:
+      summary: Обновить настройки бренда
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Branding'
+      responses:
+        '200':
+          description: Обновлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Branding'
+
+  /archive:
+    get:
+      summary: Получить архив
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Архивные объекты
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ArchiveItem'
+
+  /public/interviews/{token}:
+    parameters:
+      - in: path
+        name: token
+        required: true
+        schema:
+          type: string
+    get:
+      summary: Получить приглашение
+      responses:
+        '200':
+          description: Информация о приглашении
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invite'
+    post:
+      summary: Отправить ответ на вопрос
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                audio:
+                  type: string
+                  format: binary
+                text:
+                  type: string
+      responses:
+        '204':
+          description: Ответ принят
+
+  /public/interviews/{token}/complete:
+    post:
+      summary: Завершить интервью
+      parameters:
+        - in: path
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Завершено
