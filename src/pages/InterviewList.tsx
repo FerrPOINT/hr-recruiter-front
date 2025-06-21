@@ -2,8 +2,19 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Search } from 'lucide-react';
 import { mockApi } from '../mocks/mockApi';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+
+const formatDate = (dateString: string | undefined) => {
+  if (!dateString) return '–';
+  try {
+    return format(new Date(dateString), 'dd.MM.yyyy', { locale: ru });
+  } catch (e) {
+    return '–';
+  }
+};
 
 const InterviewList: React.FC = () => {
   const [interviews, setInterviews] = useState<any[]>([]);
@@ -52,22 +63,24 @@ const InterviewList: React.FC = () => {
             <th className="text-left font-normal w-1/4 min-w-[120px] px-4 py-2">Кандидат</th>
             <th className="text-left font-normal w-1/4 min-w-[120px] px-4 py-2">Вакансия</th>
             <th className="text-left font-normal w-1/6 min-w-[90px] px-4 py-2">Статус</th>
-            <th className="text-left font-normal w-1/6 min-w-[90px] px-4 py-2">Дата</th>
+            <th className="text-left font-normal w-1/6 min-w-[90px] px-4 py-2">Дата создания</th>
+            <th className="text-left font-normal w-1/6 min-w-[90px] px-4 py-2">Дата прохождения</th>
             <th className="text-left font-normal w-1/6 min-w-[70px] px-4 py-2">Балл</th>
           </tr>
         </thead>
         <tbody>
           {loading ? (
-            <tr><td colSpan={5} className="text-center text-gray-400 py-8">Загрузка...</td></tr>
+            <tr><td colSpan={6} className="text-center text-gray-400 py-8">Загрузка...</td></tr>
           ) : interviews.length === 0 ? (
-            <tr><td colSpan={5} className="text-center text-gray-400 py-8">Нет собеседований</td></tr>
+            <tr><td colSpan={6} className="text-center text-gray-400 py-8">Нет собеседований</td></tr>
           ) : (
             interviews.map((i) => (
               <tr key={i.id} className="border-t">
                 <td className="truncate px-4 py-2" title={i.candidate}>{i.candidate}</td>
                 <td className="truncate px-4 py-2" title={i.position}>{i.position}</td>
                 <td className="truncate px-4 py-2" title={i.status}>{i.status}</td>
-                <td className="truncate px-4 py-2" title={i.date}>{i.date}</td>
+                <td className="truncate px-4 py-2" title={i.date}>{formatDate(i.date)}</td>
+                <td className="truncate px-4 py-2" title={i.completionDate}>{formatDate(i.completionDate)}</td>
                 <td className="truncate px-4 py-2" title={String(i.score ?? '-')}>{i.score ?? '-'}</td>
               </tr>
             ))

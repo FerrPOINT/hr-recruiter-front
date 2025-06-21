@@ -12,6 +12,8 @@ import {
   Check
 } from 'lucide-react';
 import { mockApi } from '../mocks/mockApi';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
@@ -29,6 +31,15 @@ const interviewStatusMap = {
   not_started: { text: 'Не начато', icon: <Clock className="h-5 w-5 text-gray-400" /> },
 };
 
+const formatDate = (dateString: string | undefined) => {
+  if (!dateString) return '–';
+  try {
+    return format(new Date(dateString), 'dd.MM.yyyy', { locale: ru });
+  } catch (e) {
+    return '–';
+  }
+};
+
 // Fallback данные для случаев, когда API недоступен
 const fallbackStats = [
   { name: 'Активные вакансии', value: 3, icon: 'briefcase', href: '/vacancies', change: '+1', changeType: 'positive' },
@@ -44,6 +55,7 @@ const fallbackInterviews = [
     position: 'Go Developer',
     status: 'in_progress',
     date: new Date().toISOString(),
+    completionDate: undefined,
     score: null,
     positionId: 'p1',
   },
@@ -53,6 +65,7 @@ const fallbackInterviews = [
     position: 'React Developer',
     status: 'successful',
     date: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    completionDate: new Date(Date.now() - 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
     score: 8.5,
     positionId: 'p2',
   },
@@ -62,6 +75,7 @@ const fallbackInterviews = [
     position: 'Data Scientist',
     status: 'unsuccessful',
     date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+    completionDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(),
     score: 6.2,
     positionId: 'p3',
   },
@@ -77,39 +91,39 @@ const Dashboard: React.FC = () => {
   console.log('Dashboard render:', { loading, error, statsLength: stats.length, interviewsLength: recentInterviews.length });
 
   useEffect(() => {
-    setLoading(true);
-    setError(false);
-    
-    (async () => {
+    const fetchData = async () => {
+      setLoading(true);
+      setError(false);
+      
       try {
         let statsData, interviewsData;
+        
         if (useMock) {
-          console.log('Using mock API');
-          statsData = await mockApi.getStats?.() || fallbackStats;
-          interviewsData = await mockApi.getRecentInterviews?.() || fallbackInterviews;
+          statsData = await mockApi.getStats();
+          interviewsData = await mockApi.getRecentInterviews();
         } else {
-          console.log('Using real API (fallback to mock)');
           // TODO: подключить реальный API-клиент
-          statsData = await mockApi.getStats?.() || fallbackStats;
-          interviewsData = await mockApi.getRecentInterviews?.() || fallbackInterviews;
+          statsData = await mockApi.getStats();
+          interviewsData = await mockApi.getRecentInterviews();
         }
-        console.log('Data loaded:', { statsData, interviewsData });
+        
         setStats(statsData);
         setRecentInterviews(interviewsData);
       } catch (err) {
-        console.error('Error loading dashboard data:', err);
+        console.error('Error fetching dashboard data:', err);
         setError(true);
         setStats(fallbackStats);
         setRecentInterviews(fallbackInterviews);
       } finally {
         setLoading(false);
       }
-    })();
+    };
+
+    fetchData();
   }, []);
 
   return (
     <div className="space-y-6">
-      <div className="text-blue-500 mb-4">DEBUG: Dashboard component rendered</div>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -177,6 +191,12 @@ const Dashboard: React.FC = () => {
       <div className="bg-white shadow-soft rounded-lg mt-8">
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Последние собеседования</h2>
+          <Link 
+            to="/interviews" 
+            className="text-sm text-primary-500 hover:text-primary-600 font-medium"
+          >
+            Полный список собеседований →
+          </Link>
         </div>
         <div className="overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200">
@@ -186,12 +206,13 @@ const Dashboard: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Вакансия</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Балл</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата создания</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата прохождения</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
-                <tr><td colSpan={5} className="text-center text-gray-400 py-8">Загрузка...</td></tr>
+                <tr><td colSpan={6} className="text-center text-gray-400 py-8">Загрузка...</td></tr>
               ) : recentInterviews.map((interview) => (
                 <tr 
                   key={interview.id} 
@@ -205,16 +226,26 @@ const Dashboard: React.FC = () => {
                     <div className="text-sm text-gray-900">{interview.position}</div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap truncate">
-                    <div className="flex items-center">
-                      {interviewStatusMap[interview.status as keyof typeof interviewStatusMap]?.icon}
-                      <span className="ml-2 text-sm text-gray-900">{interviewStatusMap[interview.status as keyof typeof interviewStatusMap]?.text}</span>
-                    </div>
+                    {(() => {
+                      const statusInfo = interviewStatusMap[interview.status as keyof typeof interviewStatusMap];
+                      return statusInfo ? (
+                        <div className="flex items-center">
+                          {statusInfo.icon}
+                          <span className="ml-2 text-sm text-gray-900">{statusInfo.text}</span>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-900">{interview.status}</span>
+                      );
+                    })()}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap truncate" title={interview.score ? `${interview.score}` : '-'}>
-                    <div className="text-sm text-gray-900 font-medium">{interview.score || '-'}</div>
+                  <td className="px-6 py-4 whitespace-nowrap truncate" title={String(interview.score || '-')}>
+                    <div className="text-sm text-gray-900 font-medium">{interview.score || '–'}</div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate" title={new Date(interview.date).toLocaleString('ru-RU')}>
-                    {new Date(interview.date).toLocaleString('ru-RU', {day: '2-digit', month: '2-digit', year: 'numeric'})}
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate" title={interview.date}>
+                    {formatDate(interview.date)}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate" title={interview.completionDate}>
+                    {formatDate(interview.completionDate)}
                   </td>
                 </tr>
               ))}

@@ -1,46 +1,186 @@
 import React, { useEffect, useState } from 'react';
-import { BarChart2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { 
+  Briefcase, 
+  Users, 
+  TrendingUp,
+  Plus,
+  Clock,
+  CheckCircle,
+  XCircle
+} from 'lucide-react';
 import { mockApi } from '../mocks/mockApi';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
 
 const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
+const iconMap: { [key: string]: React.ElementType } = {
+  briefcase: Briefcase,
+  users: Users,
+  check: CheckCircle,
+  'trending-up': TrendingUp,
+};
+
+const interviewStatusMap: { [key: string]: { text: string; icon: React.ReactNode; color: string } } = {
+  successful: { text: 'Успешно', icon: <CheckCircle className="h-4 w-4" />, color: 'text-green-600' },
+  unsuccessful: { text: 'Неуспешно', icon: <XCircle className="h-4 w-4" />, color: 'text-red-600' },
+  in_progress: { text: 'В процессе', icon: <Clock className="h-4 w-4" />, color: 'text-yellow-600' },
+};
+
+const StatCard: React.FC<{ stat: any }> = ({ stat }) => {
+  const Icon = iconMap[stat.icon] || Briefcase;
+  return (
+    <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-sm text-gray-500">{stat.label}</p>
+          <div className="flex items-baseline mt-2">
+            <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+            <p className="ml-2 text-sm font-medium text-green-500">{stat.delta}</p>
+          </div>
+        </div>
+        <div className="p-2 bg-orange-100 rounded-lg">
+          <Icon className="h-6 w-6 text-orange-500" />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Stats: React.FC = () => {
   const [stats, setStats] = useState<any[]>([]);
+  const [recentInterviews, setRecentInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    setLoading(true);
-    (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getStats?.() || [];
-      } else {
-        // TODO: подключить реальный API-клиент
-        data = await mockApi.getStats?.() || [];
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        if (useMock) {
+          const [statsData, interviewsData] = await Promise.all([
+            mockApi.getStats(),
+            mockApi.getInterviewStats(),
+          ]);
+          setStats(statsData || []);
+          setRecentInterviews(interviewsData || []);
+        } else {
+          // TODO: Real API calls
+        }
+      } catch (err) {
+        console.error('Error loading stats data:', err);
+      } finally {
+        setLoading(false);
       }
-      setStats(data);
-      setLoading(false);
-    })();
+    };
+    fetchData();
   }, []);
 
   return (
-    <div className="py-8">
-      <h1 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-        <BarChart2 className="h-6 w-6 text-primary-500" /> Статистика
-      </h1>
-      <p className="text-gray-600 mb-6">Общая статистика по платформе.</p>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-        {loading ? (
-          <div className="col-span-2 text-center text-gray-400 py-8">Загрузка...</div>
-        ) : stats.map((stat, idx) => (
-          <div key={idx} className="bg-white border border-gray-100 rounded-lg shadow-soft p-6 flex flex-col items-start">
-            <div className="text-xs text-gray-500 mb-1">{stat.label}</div>
-            <div className="text-2xl font-bold text-primary-700">{stat.value}</div>
-          </div>
-        ))}
+    <div className="space-y-8 py-8">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Дашборд</h1>
+          <p className="text-gray-500 mt-1">Обзор активности и статистики</p>
+        </div>
+        <div className="flex space-x-3">
+          <Link to="/vacancies/create" className="btn-primary flex items-center bg-orange-500 hover:bg-orange-600">
+            <Plus className="mr-2 h-4 w-4" />
+            Создать вакансию
+          </Link>
+          <Link to="#" className="btn-secondary flex items-center bg-gray-200 hover:bg-gray-300 text-gray-800">
+            <Plus className="mr-2 h-4 w-4" />
+            Новое собеседование
+          </Link>
+        </div>
       </div>
-      <div className="bg-white border border-gray-100 rounded-lg shadow-soft p-6 text-gray-500 text-sm">
-        <div>Здесь в будущем появится график активности, динамика по вакансиям и собеседованиям, а также расширенная аналитика.</div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        {loading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm animate-pulse">
+               <div className="h-4 bg-gray-200 rounded w-1/3 mb-4"></div>
+               <div className="h-8 bg-gray-300 rounded w-1/2"></div>
+            </div>
+          ))
+        ) : (
+          stats.map((stat) => <StatCard key={stat.name} stat={stat} />)
+        )}
+      </div>
+
+      {/* Recent Interviews Table */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="px-6 py-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-800">Последние собеседования</h2>
+          <Link 
+            to="/interviews" 
+            className="text-sm text-orange-500 hover:text-orange-600 font-medium"
+          >
+            Полный список собеседований →
+          </Link>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кандидат</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Вакансия</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Балл</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата создания</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата прохождения</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white">
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} className="border-t border-gray-100">
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-3/4"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-full"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-12"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                    <td className="px-6 py-4"><div className="h-4 bg-gray-200 rounded w-24"></div></td>
+                  </tr>
+                ))
+              ) : (
+                recentInterviews.map((interview) => {
+                  const statusInfo = interviewStatusMap[interview.status];
+                  return (
+                    <tr 
+                      key={interview.id} 
+                      className="border-t border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      onClick={() => navigate(`/vacancies/${interview.positionId}`)}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-800">{interview.candidateName}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{interview.positionTitle}</td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        {statusInfo && (
+                          <div className={`inline-flex items-center font-medium ${statusInfo.color}`}>
+                            {statusInfo.icon}
+                            <span className="ml-1.5">{statusInfo.text}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800">
+                        {interview.score || '–'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {format(new Date(interview.createdAt), 'dd.MM.yyyy', { locale: ru })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {interview.completedAt ? format(new Date(interview.completedAt), 'dd.MM.yyyy', { locale: ru }) : '–'}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

@@ -11,6 +11,10 @@ import InterviewSession from './pages/InterviewSession';
 import Reports from './pages/Reports';
 import Login from './pages/Login';
 import Account from './pages/Account';
+import Team from './pages/Team';
+import Branding from './pages/Branding';
+import Tariffs from './pages/Tariffs';
+import Questions from './pages/Questions';
 
 function App() {
   return (
@@ -37,6 +41,10 @@ function App() {
             <Route path="interviews/create" element={<InterviewCreate />} />
             <Route path="reports" element={<Reports />} />
             <Route path="account" element={<Account />} />
+            <Route path="team" element={<Team />} />
+            <Route path="branding" element={<Branding />} />
+            <Route path="tariffs" element={<Tariffs />} />
+            <Route path="questions/:positionId" element={<Questions />} />
           </Route>
         </Routes>
       </div>

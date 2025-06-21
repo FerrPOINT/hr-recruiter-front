@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
   Archive,
@@ -13,17 +13,20 @@ import {
   Mail,
   Plus,
   Settings,
+  Palette,
+  CreditCard,
 } from 'lucide-react';
+import { mockApi } from '../mocks/mockApi';
 
-// Моки для пользователя и тарифа
-const MOCK_USER = {
-  email: 'ferruspoint@mail.ru',
-  language: 'Русский',
-};
-const MOCK_TARIFF = {
-  interviewsLeft: 2,
-  until: '23.06.25',
-};
+interface UserInfo {
+  email: string;
+  language: string;
+}
+
+interface TariffInfo {
+  interviewsLeft: number;
+  until: string;
+}
 
 const sidebarMenu = [
   { name: 'Вакансии', href: '/vacancies', icon: Home },
@@ -33,10 +36,24 @@ const sidebarMenu = [
 
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+  const [tariffInfo, setTariffInfo] = useState<TariffInfo | null>(null);
   const location = useLocation();
   const isVacancyPage = location.pathname.startsWith('/vacancies');
   const isInterviewSession = location.pathname.startsWith('/interview');
   const isInterviewCreatePage = location.pathname === '/interviews/create';
+  const isVacancyCreatePage = location.pathname === '/vacancies/create';
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const user = await mockApi.getUserInfo();
+      const tariff = await mockApi.getTariffInfo();
+      setUserInfo(user);
+      setTariffInfo(tariff);
+    };
+    fetchData();
+  }, []);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -75,8 +92,57 @@ const Layout: React.FC = () => {
                 </Link>
               );
             })}
+            {/* Команда */}
+            <Link
+              to="/team"
+              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                location.pathname === '/team'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
+              }`}
+            >
+              <Users className="mr-3 h-5 w-5" />
+              Команда
+            </Link>
+
+            {/* Брендинг */}
+            <Link
+              to="/branding"
+              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                location.pathname === '/branding'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
+              }`}
+            >
+              <Palette className="mr-3 h-5 w-5" />
+              Брендинг
+            </Link>
+
+            {/* Тарифы */}
+            <Link
+              to="/tariffs"
+              className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
+                location.pathname === '/tariffs'
+                  ? 'bg-primary-100 text-primary-700'
+                  : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
+              }`}
+            >
+              <CreditCard className="mr-3 h-5 w-5" />
+              Тарифы
+            </Link>
+
             {/* Выйти */}
-            <button className="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 hover:text-primary-700 w-full mt-2">
+            <button 
+              className="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 hover:text-primary-700 w-full mt-2"
+              onClick={async () => {
+                try {
+                  await mockApi.logout();
+                  navigate('/login');
+                } catch (error) {
+                  console.error('Error logging out:', error);
+                }
+              }}
+            >
               <LogOut className="mr-3 h-5 w-5" />
               Выйти
             </button>
@@ -84,11 +150,15 @@ const Layout: React.FC = () => {
         </div>
         {/* Нижние блоки */}
         <div className="p-4 space-y-3 border-t border-gray-100">
-          {/* Тариф/статистика (мок) */}
-          <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 mb-2">
-            <div className="mb-1">Лимит собеседований истекает: осталось {MOCK_TARIFF.interviewsLeft} до {MOCK_TARIFF.until}</div>
-            <Link to="/tariff" className="text-primary-600 hover:underline">Настройки тарифа →</Link>
-          </div>
+          {/* Тариф/статистика */}
+          {tariffInfo ? (
+            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 mb-2">
+              <div className="mb-1">Лимит собеседований: осталось {tariffInfo.interviewsLeft} до {tariffInfo.until}</div>
+              <Link to="/tariff" className="text-primary-600 hover:underline">Настройки тарифа →</Link>
+            </div>
+          ) : (
+            <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-400">Загрузка тарифа...</div>
+          )}
         </div>
       </aside>
 
@@ -107,19 +177,22 @@ const Layout: React.FC = () => {
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex flex-1"></div>
             <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <span className="text-sm text-gray-700 font-medium">{MOCK_USER.email}</span>
+              {userInfo ? (
+                <span className="text-sm text-gray-700 font-medium">{userInfo.email}</span>
+              ) : (
+                <span className="text-sm text-gray-400">Загрузка...</span>
+              )}
             </div>
           </div>
         </div>
         {/* Page content */}
-        <main className="flex-1 bg-gray-50 flex flex-col">
+        <main className="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 ">
           {isInterviewSession ? (
             <div className="flex justify-center items-center flex-grow bg-gray-50">
               <Outlet />
             </div>
           ) : (
-            <div className={`mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 ${isInterviewCreatePage ? 'flex-grow flex flex-col' : ''}`}>
-              <div className="text-red-500 mb-4">DEBUG: Layout content area - Path: {location.pathname}</div>
+            <div className={`mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 ${isInterviewCreatePage || isVacancyCreatePage ? 'pt-0' : ''}`}>
               <Outlet />
             </div>
           )}

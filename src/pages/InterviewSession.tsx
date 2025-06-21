@@ -43,6 +43,7 @@ const InterviewSession: React.FC = () => {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [consent, setConsent] = useState(false);
+  const [readyForAnswer, setReadyForAnswer] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -142,6 +143,7 @@ const InterviewSession: React.FC = () => {
         { from: 'ai', text: `Отлично, начинаем. Вопрос 1 из ${questions.length}.` },
         { from: 'ai', text: questions[0].text }
       ]);
+      setReadyForAnswer(true);
     } else {
       await pushMessagesWithDelay([
         { from: 'ai', text: 'Для этой вакансии пока нет вопросов. Интервью завершено.' }
@@ -151,6 +153,7 @@ const InterviewSession: React.FC = () => {
   };
   
   const handleStartRecording = () => {
+    setReadyForAnswer(false);
     setIsRecording(true);
     setRecordTimer((position as any)?.answerTime || 60); // Используем время из вакансии или 60с по умолчанию
   };
@@ -174,6 +177,7 @@ const InterviewSession: React.FC = () => {
         { from: 'ai', text: `Следующий вопрос ${nextQuestionIndex + 1} из ${questions.length}:` },
         { from: 'ai', text: questions[nextQuestionIndex].text }
       ]);
+      setReadyForAnswer(true);
     } else {
       setStep('final');
       await pushMessagesWithDelay([
@@ -385,7 +389,13 @@ const InterviewSession: React.FC = () => {
                   Начать интервью
                 </button>
               )}
-              {(step as InterviewStep) === 'question' && !isRecording && !isTranscribing && (
+              {(step as InterviewStep) === 'question' && !isRecording && !isTranscribing && !readyForAnswer && (
+                <div className="flex items-center justify-center space-x-2">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span>Ожидание вопроса...</span>
+                </div>
+              )}
+              {(step as InterviewStep) === 'question' && !isRecording && !isTranscribing && readyForAnswer && (
                 <button
                   onClick={handleStartRecording}
                   className="w-full btn-primary py-3 flex items-center justify-center"

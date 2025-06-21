@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2, Copy, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2, Copy, CheckCircle, Clock, AlertCircle, Archive } from 'lucide-react';
 import toast from 'react-hot-toast';
 // import vacanciesData from '../mocks/vacancies.json';
 import { mockApi } from '../mocks/mockApi';
@@ -33,6 +33,7 @@ const interviewStatusMap = {
 const VacancyList: React.FC = () => {
   // Состояния фильтрации и выбранной вакансии
   const [searchTerm, setSearchTerm] = useState('');
+  const [showArchived, setShowArchived] = useState(false);
   const [tab, setTab] = useState<'all' | 'my'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -57,11 +58,12 @@ const VacancyList: React.FC = () => {
     setLoading(true);
     (async () => {
       let data;
+      const status = showArchived ? 'archived' : 'active';
       if (useMock) {
-        data = await mockApi.getPositions({ status: 'active', search: searchTerm });
+        data = await mockApi.getPositions({ status, search: searchTerm });
       } else {
         // TODO: подключить реальный API-клиент
-        data = await mockApi.getPositions({ status: 'active', search: searchTerm });
+        data = await mockApi.getPositions({ status, search: searchTerm });
       }
       setVacancies(data.items);
       // Если перешли по ссылке с dashboard, выбираем нужную вакансию
@@ -74,7 +76,7 @@ const VacancyList: React.FC = () => {
       setLoading(false);
     })();
     // eslint-disable-next-line
-  }, [searchTerm]);
+  }, [searchTerm, showArchived]);
 
   useEffect(() => {
     if (selectedId) {
@@ -121,11 +123,22 @@ const VacancyList: React.FC = () => {
     }
   };
 
-  // Добавлю функцию handleDelete для удаления вакансии из списка.
-  const handleDelete = (id: string) => {
-    if (window.confirm('Вы уверены, что хотите удалить вакансию?')) {
-      setSelectedId(null);
-      window.location.reload();
+  const handleArchive = async (id: string) => {
+    if (window.confirm('Вы уверены, что хотите архивировать эту вакансию?')) {
+      try {
+        await mockApi.updatePosition(id, { status: 'archived' });
+        toast.success('Вакансия архивирована');
+        // Refetch vacancies
+        const status = showArchived ? 'archived' : 'active';
+        const data = await mockApi.getPositions({ status, search: searchTerm });
+        setVacancies(data.items);
+        if (selectedId === id) {
+          setSelectedId(data.items.length > 0 ? data.items[0].id : null);
+        }
+      } catch (error) {
+        console.error('Error archiving vacancy:', error);
+        toast.error('Не удалось архивировать вакансию');
+      }
     }
   };
 
@@ -142,15 +155,17 @@ const VacancyList: React.FC = () => {
         <aside className="w-64 bg-white border-r border-gray-100 flex flex-col pr-0">
           {/* Хедер */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <span className="font-bold text-lg text-gray-900">Вакансии</span>
-            <Link to="/vacancies/create" className="bg-primary-500 hover:bg-primary-600 text-white rounded-full p-1.5 transition-colors flex items-center justify-center">
-              <Plus className="h-5 w-5" />
+            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2 truncate"
+                title="Вакансии">Вакансии</h1>
+            <Link to="/vacancies/create"
+                  className="bg-primary-500 hover:bg-primary-600 text-white rounded-full p-1.5 transition-colors flex items-center justify-center">
+              <Plus className="h-5 w-5"/>
             </Link>
           </div>
           {/* Tabs */}
           <div className="flex gap-2 px-4 py-2">
             <button
-              className={`flex-1 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tab === 'all' ? 'bg-primary-50 text-primary-700 border-primary-200 shadow' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
+                className={`flex-1 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tab === 'all' ? 'bg-primary-50 text-primary-700 border-primary-200 shadow' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
               onClick={() => setTab('all')}
             >
               Все <span className="ml-1">{vacancies.length}</span>
@@ -174,6 +189,18 @@ const VacancyList: React.FC = () => {
                 className="pl-10 pr-3 py-2 w-full rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300 placeholder-gray-400 transition"
               />
             </div>
+          </div>
+          {/* Архивный переключатель */}
+          <div className="px-4 py-2">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-gray-800">
+              <input
+                type="checkbox"
+                checked={showArchived}
+                onChange={e => setShowArchived(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              Показать архив
+            </label>
           </div>
           {/* Список вакансий */}
           <div className="flex-1 overflow-y-auto">
@@ -217,11 +244,11 @@ const VacancyList: React.FC = () => {
           </div>
         </aside>
         {/* Правая колонка: детали выбранной вакансии */}
-        <section className="flex-1 flex flex-col bg-gray-50 p-4 pl-0">
+        <section className="flex-1 flex flex-col bg-gray-50 px-4 pb-4 pl-0">
           {!selectedVacancy ? (
             <div className="flex-1 flex items-center justify-center text-gray-400">Вакансия не выбрана</div>
           ) : (
-            <div className="p-4 flex flex-col gap-6">
+            <div className="px-4 pb-4 flex flex-col gap-6">
               {/* Верхний блок: заголовок и действия */}
               <div className="flex items-center justify-between gap-6 min-h-[44px]">
                 <div className="flex-1 flex flex-col">
@@ -239,7 +266,12 @@ const VacancyList: React.FC = () => {
                 <div className="flex gap-3 items-center">
                   <button className="btn-primary min-w-[160px] h-11 text-base flex items-center justify-center" onClick={handleCreateInterview}>Создать интервью</button>
                   <button className="btn-secondary min-w-[160px] h-11 text-base flex items-center justify-center" onClick={handleEdit}>Редактировать</button>
-                  <button className="btn-secondary min-w-[160px] h-11 text-base flex items-center justify-center" onClick={() => handleDelete(selectedVacancy.id)}>Удалить</button>
+                  <button 
+                    className="btn-secondary min-w-[160px] h-11 text-base flex items-center justify-center gap-2" 
+                    onClick={() => selectedVacancy && handleArchive(selectedVacancy.id)}>
+                    <Archive className="h-4 w-4" />
+                    Архивировать
+                  </button>
                 </div>
               </div>
               {/* Обзор */}
@@ -302,7 +334,7 @@ const VacancyList: React.FC = () => {
                             <tr>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кандидат</th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата начала</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата создания</th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата окончания</th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Оценка</th>
                               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действие</th>

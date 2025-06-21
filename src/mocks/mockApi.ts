@@ -13,6 +13,7 @@ import {
 } from '../client';
 import type { RoleEnum } from '../client/models/user';
 import vacanciesData from './vacancies.json';
+import { CheckCircle, XCircle, Clock, Briefcase, Users, TrendingUp } from 'lucide-react';
 
 const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
 
@@ -241,9 +242,26 @@ export const mockApi = {
     return result;
   },
   
-  async getInterviews(): Promise<Interview[]> {
+  async getInterviews(): Promise<any[]> {
     await delay(300);
-    return Object.values(allPositionInterviews).flat();
+    const allInterviews = Object.values(allPositionInterviews).flat();
+    
+    const enriched = allInterviews.map(interview => {
+      const candidate = allCandidates.find(c => c.id === interview.candidateId);
+      const position = vacancies.find(v => v.id === interview.positionId);
+      return {
+        id: interview.id,
+        candidate: candidate?.name || 'Unknown Candidate',
+        position: position?.title || 'Unknown Position',
+        status: interview.result || interview.status,
+        date: interview.startedAt,
+        completionDate: interview.finishedAt,
+        score: interview.aiScore || null,
+        positionId: interview.positionId,
+      }
+    });
+
+    return enriched;
   },
   
   async getPositionInterviews(positionId: string): Promise<Interview[]> {
@@ -251,30 +269,52 @@ export const mockApi = {
     return allPositionInterviews[positionId] || [];
   },
   
+  async getInterviewStats() {
+    await delay(500);
+    const allInterviews = Object.values(allPositionInterviews).flat();
+    return allInterviews.map(interview => {
+      const candidate = allCandidates.find(c => c.id === interview.candidateId);
+      const position = vacancies.find(v => v.id === interview.positionId);
+      return {
+        id: interview.id,
+        candidateName: candidate?.name || 'Unknown Candidate',
+        positionTitle: position?.title || 'Unknown Position',
+        status: interview.result || interview.status,
+        score: interview.aiScore,
+        createdAt: interview.startedAt,
+        completedAt: interview.finishedAt,
+      };
+    });
+  },
+  
   async getQuestions(positionId: string): Promise<Question[]> {
     await delay(150);
     return defaultQuestions[positionId] || [];
   },
 
-  getRecentInterviews: async () => {
+  async getRecentInterviews() {
     await delay(350);
     const allInterviews = Object.values(allPositionInterviews).flat();
-    return allInterviews
+    const recent = allInterviews
         .sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime())
-        .slice(0, 5)
-        .map(interview => {
-            const candidate = allCandidates.find(c => c.id === interview.candidateId);
-            const position = vacancies.find(p => p.id === interview.positionId);
-            return {
-                id: interview.id,
-                candidate: candidate?.name || 'Неизвестный',
-                position: position?.title || 'Неизвестна',
-                status: interview.result || interview.status,
-                date: interview.startedAt,
-                score: interview.aiScore,
-                positionId: interview.positionId,
-            };
-        });
+        .slice(0, 5);
+
+    const enriched = recent.map(interview => {
+      const candidate = allCandidates.find(c => c.id === interview.candidateId);
+      const position = vacancies.find(v => v.id === interview.positionId);
+      return {
+        id: interview.id,
+        candidate: candidate?.name || 'Unknown Candidate',
+        position: position?.title || 'Unknown Position',
+        status: interview.result || interview.status,
+        date: interview.startedAt,
+        completionDate: interview.finishedAt,
+        score: interview.aiScore || null,
+        positionId: interview.positionId,
+      }
+    });
+
+    return enriched;
   },
 
   async getStats() {
@@ -300,7 +340,8 @@ export const mockApi = {
       candidate: allCandidates.find(c => c.id === i.candidateId)?.name || '',
       position: vacancies.find(v => v.id === i.positionId)?.title || '',
       score: i.aiScore || 0,
-      date: i.finishedAt || i.startedAt || '',
+      date: i.startedAt || '',
+      completionDate: i.finishedAt || '',
       status: i.status === 'finished' ? 'Успешно' : 'В процессе',
     }));
   },
@@ -326,6 +367,22 @@ export const mockApi = {
   async getTeam() {
     await delay(200);
     return mockTeam;
+  },
+  
+  async getUserInfo() {
+    await delay(100);
+    return {
+      email: 'ferruspoint@mail.ru',
+      language: 'Русский',
+    };
+  },
+
+  async getTariffInfo() {
+    await delay(100);
+    return {
+      interviewsLeft: 2,
+      until: '23.06.25',
+    };
   },
   
   async getBranding() {
@@ -366,6 +423,365 @@ export const mockApi = {
       type: 'text' as QuestionTypeEnum,
       order: i+1,
     }));
+  },
+
+  // Аутентификация
+  async logout(): Promise<void> {
+    await delay(200);
+    // В реальном API здесь была бы очистка токена
+    return;
+  },
+
+  // Управление вакансиями
+  async createPosition(positionData: any): Promise<Position> {
+    await delay(500);
+    const newPosition: Position = {
+      id: `p${Date.now()}`,
+      title: positionData.title,
+      company: 'WMT Рекрутер',
+      description: positionData.description || '',
+      status: positionData.status || 'active',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      publicLink: `https://hr-recruiter.com/position/${Date.now()}`,
+      stats: {
+        positionId: `p${Date.now()}`,
+        interviewsTotal: 0,
+        interviewsInProgress: 0,
+        interviewsSuccessful: 0,
+        interviewsUnsuccessful: 0,
+      },
+      team: mockTeam,
+      branding: mockBranding,
+      candidates: [],
+      topics: positionData.topics || [],
+      minScore: positionData.minScore || 7.0,
+      avgScore: 0,
+    };
+    vacancies.push(newPosition);
+    return newPosition;
+  },
+
+  async updatePosition(id: string, positionData: any): Promise<Position> {
+    await delay(400);
+    const position = vacancies.find(v => v.id === id);
+    if (!position) throw new Error('Position not found');
+    
+    Object.assign(position, {
+      ...positionData,
+      updatedAt: new Date().toISOString(),
+    });
+    
+    return position;
+  },
+
+  async deletePosition(id: string): Promise<void> {
+    await delay(300);
+    const index = vacancies.findIndex(v => v.id === id);
+    if (index !== -1) {
+      vacancies[index].status = 'archived';
+    }
+  },
+
+  async getPositionPublicLink(id: string): Promise<{ publicLink: string }> {
+    await delay(200);
+    const position = vacancies.find(v => v.id === id);
+    if (!position) throw new Error('Position not found');
+    return { publicLink: position.publicLink || `https://hr-recruiter.com/position/${id}` };
+  },
+
+  async getPositionStats(id: string): Promise<any> {
+    await delay(300);
+    const position = vacancies.find(v => v.id === id);
+    if (!position) throw new Error('Position not found');
+    return position.stats;
+  },
+
+  // Управление вопросами
+  async createQuestion(positionId: string, questionData: any): Promise<Question> {
+    await delay(300);
+    const newQuestion: Question = {
+      id: `q${Date.now()}`,
+      positionId,
+      text: questionData.text,
+      type: questionData.type || 'text',
+      order: questionData.order || 1,
+      isRequired: questionData.isRequired || false,
+    };
+    
+    if (!defaultQuestions[positionId]) {
+      defaultQuestions[positionId] = [];
+    }
+    defaultQuestions[positionId].push(newQuestion);
+    
+    return newQuestion;
+  },
+
+  async updateQuestion(id: string, questionData: any): Promise<Question> {
+    await delay(300);
+    for (const positionId in defaultQuestions) {
+      const questionIndex = defaultQuestions[positionId].findIndex(q => q.id === id);
+      if (questionIndex !== -1) {
+        Object.assign(defaultQuestions[positionId][questionIndex], questionData);
+        return defaultQuestions[positionId][questionIndex];
+      }
+    }
+    throw new Error('Question not found');
+  },
+
+  async deleteQuestion(id: string): Promise<void> {
+    await delay(200);
+    for (const positionId in defaultQuestions) {
+      const questionIndex = defaultQuestions[positionId].findIndex(q => q.id === id);
+      if (questionIndex !== -1) {
+        defaultQuestions[positionId].splice(questionIndex, 1);
+        return;
+      }
+    }
+  },
+
+  // Управление кандидатами
+  async createCandidate(positionId: string, candidateData: any): Promise<Candidate> {
+    await delay(400);
+    const newCandidate: Candidate = {
+      id: `c_${positionId}_${Date.now()}`,
+      firstName: candidateData.name?.split(' ')[0] || 'Unknown',
+      lastName: candidateData.name?.split(' ')[1] || 'Candidate',
+      name: candidateData.name,
+      email: candidateData.email || '',
+      phone: candidateData.phone || '',
+      status: 'new',
+      positionId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    
+    allCandidates.push(newCandidate);
+    
+    // Добавить кандидата к вакансии
+    const position = vacancies.find(v => v.id === positionId);
+    if (position && position.candidates) {
+      position.candidates.push(newCandidate);
+    }
+    
+    return newCandidate;
+  },
+
+  async updateCandidate(id: string, candidateData: any): Promise<Candidate> {
+    await delay(300);
+    const candidate = allCandidates.find(c => c.id === id);
+    if (!candidate) throw new Error('Candidate not found');
+    
+    Object.assign(candidate, {
+      ...candidateData,
+      updatedAt: new Date().toISOString(),
+    });
+    
+    return candidate;
+  },
+
+  async deleteCandidate(id: string): Promise<void> {
+    await delay(200);
+    const index = allCandidates.findIndex(c => c.id === id);
+    if (index !== -1) {
+      allCandidates.splice(index, 1);
+    }
+  },
+
+  // Управление интервью
+  async startInterview(candidateId: string): Promise<Interview> {
+    await delay(500);
+    const candidate = allCandidates.find(c => c.id === candidateId);
+    if (!candidate) throw new Error('Candidate not found');
+    
+    const newInterview: Interview = {
+      id: `i_${candidateId}_${Date.now()}`,
+      candidateId,
+      positionId: candidate.positionId,
+      status: 'in_progress',
+      startedAt: new Date().toISOString(),
+      transcript: '',
+      aiScore: 0,
+      answers: [],
+    };
+    
+    if (!allPositionInterviews[candidate.positionId]) {
+      allPositionInterviews[candidate.positionId] = [];
+    }
+    allPositionInterviews[candidate.positionId].push(newInterview);
+    
+    return newInterview;
+  },
+
+  async submitInterviewAnswer(candidateId: string, answerData: any): Promise<any> {
+    await delay(300);
+    const interview = Object.values(allPositionInterviews)
+      .flat()
+      .find(i => i.candidateId === candidateId && i.status === 'in_progress');
+    
+    if (!interview) throw new Error('Interview not found');
+    
+    const answer = {
+      id: `ans_${Date.now()}`,
+      interviewId: interview.id,
+      questionId: answerData.questionId,
+      answerText: answerData.answerText || '',
+      audioUrl: answerData.audioUrl || '',
+      transcript: answerData.transcript || '',
+      createdAt: new Date().toISOString(),
+    };
+    
+    if (interview.answers) {
+      interview.answers.push(answer);
+    }
+    return answer;
+  },
+
+  async finishInterview(candidateId: string): Promise<Interview> {
+    await delay(400);
+    const interview = Object.values(allPositionInterviews)
+      .flat()
+      .find(i => i.candidateId === candidateId && i.status === 'in_progress');
+    
+    if (!interview) throw new Error('Interview not found');
+    
+    interview.status = 'finished';
+    interview.finishedAt = new Date().toISOString();
+    interview.aiScore = +(5 + Math.random() * 4.5).toFixed(1);
+    interview.result = interview.aiScore >= 7.0 ? 'successful' : 'unsuccessful';
+    
+    return interview;
+  },
+
+  // Управление брендингом
+  async updateBranding(brandingData: any): Promise<Branding> {
+    await delay(300);
+    Object.assign(mockBranding, brandingData);
+    return mockBranding;
+  },
+
+  // Управление пользователями
+  async getUsers(): Promise<User[]> {
+    await delay(300);
+    return mockTeam;
+  },
+
+  async createUser(userData: any): Promise<User> {
+    await delay(400);
+    const newUser: User = {
+      id: `u${Date.now()}`,
+      name: userData.name,
+      email: userData.email,
+      role: userData.role,
+      avatarUrl: `https://randomuser.me/api/portraits/${userData.role === 'admin' ? 'men' : 'women'}/${Date.now() % 50}.jpg`,
+      language: 'Русский',
+    };
+    mockTeam.push(newUser);
+    return newUser;
+  },
+
+  async getUser(id: string): Promise<User | undefined> {
+    await delay(200);
+    return mockTeam.find(u => u.id === id);
+  },
+
+  async updateUser(id: string, userData: any): Promise<User> {
+    await delay(300);
+    const user = mockTeam.find(u => u.id === id);
+    if (!user) throw new Error('User not found');
+    
+    Object.assign(user, userData);
+    return user;
+  },
+
+  async deleteUser(id: string): Promise<void> {
+    await delay(200);
+    const index = mockTeam.findIndex(u => u.id === id);
+    if (index !== -1) {
+      mockTeam.splice(index, 1);
+    }
+  },
+
+  // Управление тарифами
+  async getTariffs(): Promise<any[]> {
+    await delay(300);
+    return [
+      { id: 't1', name: 'Базовый', features: ['5 интервью/месяц'], price: 0, isActive: true },
+      { id: 't2', name: 'Профессиональный', features: ['50 интервью/месяц', 'AI анализ'], price: 5000, isActive: true },
+      { id: 't3', name: 'Корпоративный', features: ['Неограниченно', 'AI анализ', 'Приоритетная поддержка'], price: 15000, isActive: true },
+    ];
+  },
+
+  async createTariff(tariffData: any): Promise<any> {
+    await delay(400);
+    const newTariff = {
+      id: `t${Date.now()}`,
+      name: tariffData.name,
+      features: tariffData.features || [],
+      price: tariffData.price,
+      isActive: tariffData.isActive || true,
+    };
+    return newTariff;
+  },
+
+  async updateTariff(id: string, tariffData: any): Promise<any> {
+    await delay(300);
+    // В реальном API здесь было бы обновление тарифа
+    return { id, ...tariffData };
+  },
+
+  async deleteTariff(id: string): Promise<void> {
+    await delay(200);
+    // В реальном API здесь было бы удаление тарифа
+  },
+
+  // Статистика
+  async getPositionsStats(): Promise<any[]> {
+    await delay(300);
+    return vacancies.map(v => v.stats);
+  },
+
+  async getCandidatesStats(): Promise<any> {
+    await delay(300);
+    const total = allCandidates.length;
+    const inProgress = allCandidates.filter(c => c.status === 'in_progress').length;
+    const finished = allCandidates.filter(c => c.status === 'finished').length;
+    const hired = allCandidates.filter(c => c.status === 'hired').length;
+    
+    return { total, inProgress, finished, hired };
+  },
+
+  // AI сервисы
+  async transcribeAudio(audioFile: File): Promise<{ transcript: string }> {
+    await delay(1000);
+    return { transcript: 'Это мок транскрипция аудио файла. В реальном API здесь была бы обработка аудио.' };
+  },
+
+  // НЕ УБИРАТЬ В МОКИ - это UI конфигурация для статусов интервью
+  getInterviewStatusMap() {
+    return {
+      successful: { text: 'Успешно', icon: 'check-circle' },
+      unsuccessful: { text: 'Неуспешно', icon: 'x-circle' },
+      in_progress: { text: 'В процессе', icon: 'clock' },
+      not_started: { text: 'Не начато', icon: 'clock' },
+    };
+  },
+
+  // НЕ УБИРАТЬ В МОКИ - это UI конфигурация для иконок
+  getIconMap() {
+    return {
+      briefcase: 'briefcase',
+      users: 'users',
+      check: 'check-circle',
+      'trending-up': 'trending-up',
+    };
+  },
+
+  // НЕ УБИРАТЬ В МОКИ - это генерация случайных имен
+  getRandomNames() {
+    const firstName = firstNames[Math.floor(Math.random() * firstNames.length)];
+    const lastName = lastNames[Math.floor(Math.random() * lastNames.length)];
+    return { firstName, lastName, fullName: `${firstName} ${lastName}` };
   },
 };
 
