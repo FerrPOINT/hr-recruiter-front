@@ -11,9 +11,34 @@ servers:
   - url: https://api.hr-recruiter.com/api
     description: Production server
 
+tags:
+  - name: Auth
+    description: Аутентификация и управление сессиями
+  - name: Account
+    description: Управление аккаунтом текущего пользователя
+  - name: Positions
+    description: Управление вакансиями
+  - name: Candidates
+    description: Управление кандидатами
+  - name: Interviews
+    description: Управление собеседованиями
+  - name: Questions
+    description: Управление вопросами для собеседований
+  - name: Team & Users
+    description: Управление командой и пользователями
+  - name: Settings
+    description: Настройки системы (тарифы, брендинг)
+  - name: Analytics & Reports
+    description: Статистика и отчеты
+  - name: AI
+    description: Взаимодействие с AI-ассистентом
+
 paths:
   /auth/login:
     post:
+      operationId: login
+      tags:
+        - Auth
       summary: Вход пользователя
       requestBody:
         required: true
@@ -31,6 +56,9 @@ paths:
 
   /auth/logout:
     post:
+      operationId: logout
+      tags:
+        - Auth
       summary: Выход пользователя
       responses:
         '204':
@@ -38,7 +66,10 @@ paths:
 
   /account:
     get:
-      summary: Получить профиль пользователя
+      operationId: getAccount
+      tags:
+        - Account
+      summary: Получить профиль текущего пользователя
       responses:
         '200':
           description: Профиль пользователя
@@ -47,7 +78,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
     put:
-      summary: Обновить профиль пользователя
+      operationId: updateAccount
+      tags:
+        - Account
+      summary: Обновить профиль текущего пользователя
       requestBody:
         required: true
         content:
@@ -64,7 +98,10 @@ paths:
 
   /positions:
     get:
-      summary: Список вакансий
+      operationId: listPositions
+      tags:
+        - Positions
+      summary: Получить список вакансий
       parameters:
         - in: query
           name: status
@@ -102,7 +139,10 @@ paths:
                   total:
                     type: integer
     post:
-      summary: Создать вакансию
+      operationId: createPosition
+      tags:
+        - Positions
+      summary: Создать новую вакансию
       requestBody:
         required: true
         content:
@@ -119,7 +159,10 @@ paths:
 
   /positions/{id}:
     get:
-      summary: Получить вакансию
+      operationId: getPosition
+      tags:
+        - Positions
+      summary: Получить вакансию по ID
       parameters:
         - in: path
           name: id
@@ -134,7 +177,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Position'
     put:
-      summary: Обновить вакансию
+      operationId: updatePosition
+      tags:
+        - Positions
+      summary: Обновить вакансию по ID
       parameters:
         - in: path
           name: id
@@ -155,7 +201,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/Position'
     patch:
-      summary: Частично обновить вакансию (например, для архивации)
+      operationId: partialUpdatePosition
+      tags:
+        - Positions
+      summary: Частично обновить вакансию (для архивации)
       parameters:
         - in: path
           name: id
@@ -183,6 +232,9 @@ paths:
 
   /positions/{id}/public-link:
     get:
+      operationId: getPositionPublicLink
+      tags:
+        - Positions
       summary: Получить публичную ссылку на вакансию
       parameters:
         - in: path
@@ -203,6 +255,9 @@ paths:
 
   /positions/{id}/stats:
     get:
+      operationId: getPositionStats
+      tags:
+        - Positions
       summary: Получить статистику по вакансии
       parameters:
         - in: path
@@ -220,6 +275,9 @@ paths:
 
   /positions/{positionId}/questions:
     get:
+      operationId: listPositionQuestions
+      tags:
+        - Questions
       summary: Список вопросов по вакансии
       parameters:
         - in: path
@@ -237,6 +295,9 @@ paths:
                 items:
                   $ref: '#/components/schemas/Question'
     post:
+      operationId: createPositionQuestion
+      tags:
+        - Questions
       summary: Добавить вопрос к вакансии
       parameters:
         - in: path
@@ -260,6 +321,9 @@ paths:
 
   /questions/{id}:
     put:
+      operationId: updateQuestion
+      tags:
+        - Questions
       summary: Обновить вопрос
       parameters:
         - in: path
@@ -280,9 +344,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Question'
+    delete:
+      operationId: deleteQuestion
+      tags:
+        - Questions
+      summary: Удалить вопрос по ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Вопрос успешно удален
 
   /positions/{positionId}/candidates:
     get:
+      operationId: listPositionCandidates
+      tags:
+        - Candidates
       summary: Список кандидатов по вакансии
       parameters:
         - in: path
@@ -300,6 +381,9 @@ paths:
                 items:
                   $ref: '#/components/schemas/Candidate'
     post:
+      operationId: createPositionCandidate
+      tags:
+        - Candidates
       summary: Добавить кандидата к вакансии
       parameters:
         - in: path
@@ -323,6 +407,9 @@ paths:
 
   /candidates/{id}:
     get:
+      operationId: getCandidate
+      tags:
+        - Candidates
       summary: Получить кандидата
       parameters:
         - in: path
@@ -338,6 +425,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Candidate'
     put:
+      operationId: updateCandidate
+      tags:
+        - Candidates
       summary: Обновить кандидата
       parameters:
         - in: path
@@ -358,13 +448,115 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Candidate'
+    delete:
+      operationId: deleteCandidate
+      tags:
+        - Candidates
+      summary: Удалить кандидата по ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Кандидат успешно удален
 
   /candidates/{candidateId}/interview:
-    get:
-      summary: Получить интервью кандидата
+    post:
+      operationId: createInterviewFromCandidate
+      tags:
+        - Interviews
+      summary: Создать и начать интервью
       parameters:
         - in: path
           name: candidateId
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Interview'
+
+  /positions/{positionId}/interviews:
+    get:
+      operationId: listPositionInterviews
+      tags:
+        - Interviews
+      summary: Список собеседований по вакансии
+      parameters:
+        - in: path
+          name: positionId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Interview'
+
+  /interviews:
+    get:
+      operationId: listInterviews
+      tags:
+        - Interviews
+      summary: Получить список всех собеседований
+      description: Возвращает список всех собеседований в системе.
+      parameters:
+        - in: query
+          name: positionId
+          schema:
+            type: string
+          description: Фильтр по ID вакансии
+        - in: query
+          name: candidateId
+          schema:
+            type: string
+          description: Фильтр по ID кандидата
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: size
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Список собеседований
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Interview'
+                  total:
+                    type: integer
+
+  /interviews/{id}:
+    get:
+      operationId: getInterview
+      tags:
+        - Interviews
+      summary: Получить собеседование
+      parameters:
+        - in: path
+          name: id
           required: true
           schema:
             type: string
@@ -375,28 +567,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Interview'
+
+  /interviews/{id}/start:
     post:
+      operationId: startInterview
+      tags:
+        - Interviews
       summary: Начать интервью
       parameters:
         - in: path
-          name: candidateId
+          name: id
           required: true
           schema:
             type: string
       responses:
-        '201':
-          description: Интервью начато
+        '204':
+          description: OK
+
+  /interviews/{id}/finish:
+    post:
+      operationId: finishInterview
+      tags:
+        - Interviews
+      summary: Завершить интервью
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Interview'
 
-  /candidates/{candidateId}/interview/answer:
+  /interviews/{id}/answer:
     post:
-      summary: Отправить ответ на вопрос интервью
+      operationId: submitInterviewAnswer
+      tags:
+        - Interviews
+      summary: Отправить ответ на вопрос
       parameters:
         - in: path
-          name: candidateId
+          name: id
           required: true
           schema:
             type: string
@@ -407,25 +623,8 @@ paths:
             schema:
               $ref: '#/components/schemas/InterviewAnswerCreateRequest'
       responses:
-        '201':
-          description: Ответ сохранён
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InterviewAnswer'
-
-  /candidates/{candidateId}/interview/finish:
-    post:
-      summary: Завершить интервью
-      parameters:
-        - in: path
-          name: candidateId
-          required: true
-          schema:
-            type: string
-      responses:
         '200':
-          description: Интервью завершено
+          description: OK
           content:
             application/json:
               schema:
@@ -433,6 +632,9 @@ paths:
 
   /branding:
     get:
+      operationId: getBranding
+      tags:
+        - Settings
       summary: Получить настройки брендинга
       responses:
         '200':
@@ -442,6 +644,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Branding'
     put:
+      operationId: updateBranding
+      tags:
+        - Settings
       summary: Обновить настройки брендинга
       requestBody:
         required: true
@@ -459,6 +664,9 @@ paths:
 
   /users:
     get:
+      operationId: listUsers
+      tags:
+        - Team & Users
       summary: Список пользователей
       responses:
         '200':
@@ -470,7 +678,10 @@ paths:
                 items:
                   $ref: '#/components/schemas/User'
     post:
-      summary: Добавить пользователя
+      operationId: createUser
+      tags:
+        - Team & Users
+      summary: Создать пользователя
       requestBody:
         required: true
         content:
@@ -479,7 +690,7 @@ paths:
               $ref: '#/components/schemas/UserCreateRequest'
       responses:
         '201':
-          description: Пользователь добавлен
+          description: OK
           content:
             application/json:
               schema:
@@ -487,6 +698,9 @@ paths:
 
   /users/{id}:
     get:
+      operationId: getUser
+      tags:
+        - Team & Users
       summary: Получить пользователя
       parameters:
         - in: path
@@ -502,6 +716,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/User'
     put:
+      operationId: updateUser
+      tags:
+        - Team & Users
       summary: Обновить пользователя
       parameters:
         - in: path
@@ -522,9 +739,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+    delete:
+      operationId: deleteUser
+      tags:
+        - Team & Users
+      summary: Удалить пользователя по ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Пользователь успешно удален
 
   /tariffs:
     get:
+      operationId: listTariffs
+      tags:
+        - Settings
       summary: Список тарифов
       responses:
         '200':
@@ -536,6 +770,9 @@ paths:
                 items:
                   $ref: '#/components/schemas/Tariff'
     post:
+      operationId: createTariff
+      tags:
+        - Settings
       summary: Создать тариф
       requestBody:
         required: true
@@ -545,7 +782,7 @@ paths:
               $ref: '#/components/schemas/TariffCreateRequest'
       responses:
         '201':
-          description: Тариф создан
+          description: OK
           content:
             application/json:
               schema:
@@ -553,6 +790,9 @@ paths:
 
   /tariffs/{id}:
     get:
+      operationId: getTariff
+      tags:
+        - Settings
       summary: Получить тариф
       parameters:
         - in: path
@@ -568,6 +808,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Tariff'
     put:
+      operationId: updateTariff
+      tags:
+        - Settings
       summary: Обновить тариф
       parameters:
         - in: path
@@ -580,7 +823,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/TariffUpdateRequest'
+              $ref: '#/components/schemas/Tariff'
       responses:
         '200':
           description: OK
@@ -588,66 +831,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Tariff'
+    delete:
+      operationId: deleteTariff
+      tags:
+        - Settings
+      summary: Удалить тариф по ID
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Тариф успешно удален
 
-  /stats/positions:
+  /reports:
     get:
-      summary: Статистика по вакансиям
+      operationId: getReports
+      tags:
+        - Analytics & Reports
+      summary: Получить отчеты по собеседованиям
+      description: Генерирует и возвращает отчеты, сгруппированные по месяцам.
       responses:
         '200':
-          description: OK
+          description: Успешный ответ с отчетами
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PositionStats'
-
-  /stats/candidates:
-    get:
-      summary: Статистика по кандидатам
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CandidateStats'
-
-  /stats/interviews:
-    get:
-      summary: Статистика по интервью
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InterviewStats'
-
-  /ai/generate-questions:
-    post:
-      summary: Генерация вопросов AI (мок)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                positionDescription:
-                  type: string
-      responses:
-        '200':
-          description: Сгенерированные вопросы
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Question'
+                  $ref: '#/components/schemas/MonthlyReport'
 
   /ai/transcribe:
     post:
+      operationId: transcribeAudio
+      tags:
+        - AI
       summary: Транскрибировать аудио (заглушка)
       requestBody:
         required: true
@@ -670,20 +890,21 @@ paths:
                   transcript:
                     type: string
 
-  /interviews:
-    get:
-      summary: Список всех интервью
-      parameters:
-        - in: query
-          name: page
-          schema:
-            type: integer
-            default: 1
-        - in: query
-          name: size
-          schema:
-            type: integer
-            default: 20
+  /ai/generate-questions:
+    post:
+      operationId: generateQuestions
+      tags:
+        - AI
+      summary: Сгенерировать вопросы (заглушка)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                positionDescription:
+                  type: string
       responses:
         '200':
           description: OK
@@ -692,30 +913,14 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    candidate:
-                      type: string
-                    position:
-                      type: string
-                    status:
-                      type: string
-                    date:
-                      type: string
-                      format: date-time
-                    completionDate:
-                      type: string
-                      format: date-time
-                    score:
-                      type: number
-                    positionId:
-                      type: string
+                  $ref: '#/components/schemas/Question'
 
-  /interviews/recent:
+  /stats/positions:
     get:
-      summary: Недавние интервью
+      operationId: getPositionsStats
+      tags:
+        - Analytics & Reports
+      summary: Статистика по вакансиям
       responses:
         '200':
           description: OK
@@ -724,86 +929,35 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    candidate:
-                      type: string
-                    position:
-                      type: string
-                    status:
-                      type: string
-                    date:
-                      type: string
-                      format: date-time
-                    completionDate:
-                      type: string
-                      format: date-time
-                    score:
-                      type: number
-                    positionId:
-                      type: string
+                  $ref: '#/components/schemas/PositionStats'
 
-  /interviews/stats:
+  /stats/candidates:
     get:
-      summary: Статистика интервью
+      operationId: getCandidatesStats
+      tags:
+        - Analytics & Reports
+      summary: Статистика по кандидатам
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    candidateName:
-                      type: string
-                    positionTitle:
-                      type: string
-                    status:
-                      type: string
-                    score:
-                      type: number
-                    createdAt:
-                      type: string
-                      format: date-time
-                    completedAt:
-                      type: string
-                      format: date-time
+                $ref: '#/components/schemas/CandidateStats'
 
-  /reports:
+  /stats/interviews:
     get:
-      summary: Отчеты
+      operationId: getInterviewsStats
+      tags:
+        - Analytics & Reports
+      summary: Статистика по интервью
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  properties:
-                    id:
-                      type: string
-                    candidate:
-                      type: string
-                    position:
-                      type: string
-                    score:
-                      type: number
-                    date:
-                      type: string
-                      format: date-time
-                    completionDate:
-                      type: string
-                      format: date-time
-                    status:
-                      type: string
+                $ref: '#/components/schemas/InterviewStats'
 
   /archive:
     get:
@@ -840,6 +994,9 @@ paths:
 
   /tariff/info:
     get:
+      operationId: getTariffInfo
+      tags:
+        - Settings
       summary: Информация о тарифе пользователя
       responses:
         '200':
@@ -854,8 +1011,27 @@ paths:
                   until:
                     type: string
 
+  /team:
+    get:
+      operationId: getTeam
+      tags:
+        - Team & Users
+      summary: Получить информацию о команде
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
   /checklist:
     get:
+      operationId: getChecklist
+      tags:
+        - Interviews
       summary: Чек-лист для интервью
       responses:
         '200':
@@ -872,6 +1048,9 @@ paths:
 
   /invite/info:
     get:
+      operationId: getInviteInfo
+      tags:
+        - Interviews
       summary: Информация для приглашения
       responses:
         '200':
@@ -885,6 +1064,25 @@ paths:
                     type: string
                   questionsCount:
                     type: integer
+
+  /user/info:
+    get:
+      operationId: getUserInfo
+      tags:
+        - Account
+      summary: Получить дополнительную информацию о пользователе
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone:
+                    type: string
+                  preferences:
+                    type: object
 
 components:
   schemas:
@@ -1312,15 +1510,33 @@ components:
         - admin
         - recruiter
         - viewer
+    MonthlyReport:
+      type: object
+      properties:
+        month:
+          type: string
+          example: "Июль 2024"
+        totalInterviews:
+          type: integer
+        successful:
+          type: integer
+        unsuccessful:
+          type: integer
+        avgScore:
+          type: number
+          format: float
+        dynamics:
+          type: integer
+          description: "Динамика в % по сравнению с прошлым месяцем"
+          example: 15
 
   securitySchemes:
-    bearerAuth:
+    basicAuth:
       type: http
-      scheme: bearer
-      bearerFormat: JWT
+      scheme: basic
 
 security:
-  - bearerAuth: []
+  - basicAuth: []
 
 x-readme:
   explorer-enabled: true

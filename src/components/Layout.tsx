@@ -17,6 +17,8 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { mockApi } from '../mocks/mockApi';
+import { authService } from '../services/authService';
+import toast from 'react-hot-toast';
 
 interface UserInfo {
   email: string;
@@ -45,15 +47,31 @@ const Layout: React.FC = () => {
   const isVacancyCreatePage = location.pathname === '/vacancies/create';
   const navigate = useNavigate();
 
+  const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+
   useEffect(() => {
     const fetchData = async () => {
-      const user = await mockApi.getUserInfo();
-      const tariff = await mockApi.getTariffInfo();
-      setUserInfo(user);
-      setTariffInfo(tariff);
+      try {
+        let user, tariff;
+        if (useMock) {
+          user = await mockApi.getUserInfo();
+          tariff = await mockApi.getTariffInfo();
+        } else {
+          // Для real API пока используем mock данные для UI
+          user = await mockApi.getUserInfo();
+          tariff = await mockApi.getTariffInfo();
+        }
+        setUserInfo(user);
+        setTariffInfo(tariff);
+      } catch (error: any) {
+        console.error('Error loading user data:', error);
+        if (error.response?.status === 401) {
+          navigate('/login');
+        }
+      }
     };
     fetchData();
-  }, []);
+  }, [navigate]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
@@ -136,10 +154,18 @@ const Layout: React.FC = () => {
               className="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 hover:text-primary-700 w-full mt-2"
               onClick={async () => {
                 try {
-                  await mockApi.logout();
+                  if (useMock) {
+                    await mockApi.logout();
+                  } else {
+                    await authService.logout();
+                  }
+                  toast.success('Выход выполнен успешно');
                   navigate('/login');
-                } catch (error) {
+                } catch (error: any) {
                   console.error('Error logging out:', error);
+                  toast.error('Ошибка при выходе');
+                  // В любом случае перенаправляем на логин
+                  navigate('/login');
                 }
               }}
             >

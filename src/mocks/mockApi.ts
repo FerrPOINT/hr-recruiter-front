@@ -10,6 +10,7 @@ import {
   InterviewResultEnum,
   InterviewStatusEnum,
   QuestionTypeEnum,
+  UserRoleEnum,
 } from '../client';
 import type { RoleEnum } from '../client/models/user';
 import vacanciesData from './vacancies.json';
@@ -392,12 +393,52 @@ export const mockApi = {
 
   async getAccount() {
     await delay(200);
-    return mockTeam[0];
+    
+    // Пытаемся получить данные пользователя из sessionStorage
+    const currentUserStr = sessionStorage.getItem('currentUser');
+    if (currentUserStr) {
+      try {
+        const currentUser = JSON.parse(currentUserStr);
+        return {
+          ...currentUser,
+          phone: currentUser.phone || '+7 (999) 123-45-67' // добавляем телефон если его нет
+        };
+      } catch (e) {
+        console.warn('Failed to parse currentUser from sessionStorage:', e);
+      }
+    }
+    
+    // Возвращаем дефолтные данные, если нет сохраненного пользователя
+    return {
+      id: 'user-1',
+      name: 'Тестовый Пользователь',
+      email: 'ferruspoint@mail.ru',
+      role: UserRoleEnum.recruiter,
+      avatarUrl: 'https://randomuser.me/api/portraits/women/1.jpg',
+      language: 'Русский',
+      phone: '+7 (999) 123-45-67'
+    };
   },
 
   async login(email: string, password: string) {
     await delay(500);
-    return { success: true };
+    const userEmail = email || 'test@example.com';
+    
+    // Создаем более реалистичного пользователя на основе email
+    const userName = email ? email.split('@')[0] : 'Тестовый';
+    const userRole = email?.includes('admin') ? UserRoleEnum.admin : email?.includes('viewer') ? UserRoleEnum.viewer : UserRoleEnum.recruiter;
+    
+    return { 
+      token: 'mock-jwt-token-' + Date.now(),
+      user: {
+        id: 'user-' + Date.now(),
+        name: userName.charAt(0).toUpperCase() + userName.slice(1) + ' Пользователь',
+        email: userEmail,
+        role: userRole,
+        avatarUrl: `https://randomuser.me/api/portraits/${userRole === UserRoleEnum.admin ? 'men' : 'women'}/${Math.floor(Math.random() * 50)}.jpg`,
+        language: 'Русский'
+      }
+    };
   },
 
   async getArchive() {
