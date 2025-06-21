@@ -6,17 +6,19 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#FFF3E6',
-          100: '#FFE0BF',
-          200: '#FFC180',
-          300: '#FFA142',
-          400: '#FF8A1A',
-          500: '#FF7A00',
-          600: '#E66E00',
-          700: '#B35400',
-          800: '#804000',
-          900: '#663300',
+        'wmt-orange': '#FF6600',
+        'wmt-orange-dark': '#E65C00',
+        'primary': {
+          '50': '#fff7ed',
+          '100': '#ffedd5',
+          '200': '#fed7aa',
+          '300': '#fdba74',
+          '400': '#fb923c',
+          '500': '#f97316',
+          '600': '#ea580c',
+          '700': '#c2410c',
+          '800': '#9a3412',
+          '900': '#7c2d12',
         },
         gray: {
           50: '#f9fafb',
@@ -30,8 +32,6 @@ module.exports = {
           800: '#1f2937',
           900: '#111827',
         },
-        'wmt-orange': '#FF7A00',
-        'wmt-orange-dark': '#E66E00',
         'wmt-orange-light': '#FFA142',
         'wmt-orange-bg': '#FFF3E6',
         'wmt-orange-accent': '#FF8A1A',

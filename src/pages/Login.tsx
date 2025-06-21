@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { mockApi } from '../mocks/mockApi';
+
+const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -12,12 +15,16 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    
-    // Имитация входа
-    setTimeout(() => {
+    if (useMock) {
+      await mockApi.login?.(email, password);
       setIsLoading(false);
       navigate('/');
-    }, 1000);
+    } else {
+      // TODO: подключить реальный API-клиент
+      await mockApi.login?.(email, password);
+      setIsLoading(false);
+      navigate('/');
+    }
   };
 
   return (

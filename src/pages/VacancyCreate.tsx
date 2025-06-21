@@ -1,16 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { mockApi } from '../mocks/mockApi';
 
-// Моки для генерации вопросов и топиков
-const MOCK_TOPICS = ['Go', 'Конкурентность', 'Обработка ошибок'];
-const MOCK_QUESTION_TYPES = [
-  'Только хард-скиллы',
-  'В основном хард-скиллы',
-  'Хард и софт-скиллы поровну',
-  'В основном софт-скиллы и опыт',
-  'Только софт скиллы и опыт',
-];
+const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
 const VacancyCreate: React.FC = () => {
   const navigate = useNavigate();
@@ -32,19 +25,14 @@ const VacancyCreate: React.FC = () => {
     saveVideo: false,
     randomOrder: false,
     description: '',
-    questionType: MOCK_QUESTION_TYPES[1],
+    questionType: 'В основном хард-скиллы',
     questionsCount: 5,
     checkType: '',
   });
   // Вопросы (моки)
-  const [questions, setQuestions] = useState([
-    'Как вы используете горутины для достижения конкурентности в Go?',
-    'Что такое каналы в Go и как они работают?',
-    'Как вы обрабатываете ошибки в Go?',
-    'Расскажите о проекте, где вы использовали Go. Какие были основные задачи?',
-    'Как вы справляетесь с дедлайнами и приоритизацией задач?'
-  ]);
+  const [questions, setQuestions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isGenLoading, setIsGenLoading] = useState(false);
 
   // Если пришли данные для редактирования
   useEffect(() => {
@@ -65,21 +53,17 @@ const VacancyCreate: React.FC = () => {
         saveVideo: vacancy.saveVideo || false,
         randomOrder: vacancy.randomOrder || false,
         description: vacancy.description || '',
-        questionType: vacancy.questionType || MOCK_QUESTION_TYPES[1],
+        questionType: vacancy.questionType || 'В основном хард-скиллы',
         questionsCount: vacancy.questionsCount || 5,
         checkType: vacancy.checkType || '',
       });
-      setQuestions(
-        Array.isArray(vacancy.questions) && vacancy.questions.length > 0
-          ? vacancy.questions
-          : [
-              'Как вы используете горутины для достижения конкурентности в Go?',
-              'Что такое каналы в Go и как они работают?',
-              'Как вы обрабатываете ошибки в Go?',
-              'Расскажите о проекте, где вы использовали Go. Какие были основные задачи?',
-              'Как вы справляетесь с дедлайнами и приоритизацией задач?'
-            ]
-      );
+      if (vacancy.id && !questions?.length) {
+        // Если нет вопросов — загрузить их через mockApi
+        (async () => {
+          const qs = await mockApi.getQuestions(String(vacancy.id));
+          setQuestions(qs.map((q: any) => q.text));
+        })();
+      }
     }
   }, [location.state]);
 
@@ -100,21 +84,25 @@ const VacancyCreate: React.FC = () => {
   const updateQuestion = (idx: number, value: string) => setQuestions(qs => qs.map((q, i) => i === idx ? value : q));
   const removeQuestion = (idx: number) => setQuestions(qs => qs.filter((_, i) => i !== idx));
 
-  // Моки генерации вопросов (заглушка)
-  const generateQuestions = () => {
-    setQuestions([
-      'Как вы используете горутины для достижения конкурентности в Go?',
-      'Что такое каналы в Go и как они работают?',
-      'Как вы обрабатываете ошибки в Go?',
-      'Расскажите о проекте, где вы использовали Go. Какие были основные задачи?',
-      'Как вы справляетесь с дедлайнами и приоритизацией задач?'
-    ]);
+  // Генерация вопросов через mockApi
+  const generateQuestions = async () => {
+    setIsGenLoading(true);
+    let result;
+    if (useMock) {
+      result = await mockApi.generateQuestions({ description: form.description, questionsCount: Number(form.questionsCount) });
+    } else {
+      // TODO: подключить реальный API-клиент
+      result = await mockApi.generateQuestions({ description: form.description, questionsCount: Number(form.questionsCount) });
+    }
+    setQuestions(result.map((q: any) => q.text));
+    setIsGenLoading(false);
   };
 
   // Сабмит формы (мок)
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    // TODO: отправка данных через API
     setTimeout(() => {
       setIsLoading(false);
       navigate('/vacancies');
@@ -159,12 +147,12 @@ const VacancyCreate: React.FC = () => {
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Что проверяем?</label>
                 <select name="questionType" value={form.questionType} onChange={handleChange} className="input-field">
-                  {MOCK_QUESTION_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                  {['Только хард-скиллы','В основном хард-скиллы','Хард и софт-скиллы поровну','В основном софт-скиллы и опыт','Только софт скиллы и опыт'].map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
               </div>
             </div>
             <div className="flex justify-end">
-              <button type="button" className="btn-primary h-10 px-6 text-base" onClick={generateQuestions}>Сгенерировать</button>
+              <button type="button" className="btn-primary h-10 px-6 text-base" onClick={generateQuestions} disabled={isGenLoading}>{isGenLoading ? 'Генерируем...' : 'Сгенерировать'}</button>
             </div>
           </div>
           {/* Основные данные и условия */}
@@ -248,34 +236,32 @@ const VacancyCreate: React.FC = () => {
           </div>
           {/* Вопросы */}
           <div className="bg-white border border-gray-100 rounded-xl p-6 flex flex-col gap-4 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xl font-semibold text-gray-900">Вопросы для собеседования</h2>
-              <button type="button" className="btn-secondary flex items-center h-9 px-4 text-sm" onClick={addQuestion}>
-                <Plus className="mr-1 h-4 w-4" /> Добавить
-              </button>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-semibold text-gray-900">Вопросы для интервью</span>
+              <button type="button" className="btn-secondary px-3 py-1 text-xs" onClick={addQuestion}>Добавить вопрос</button>
             </div>
-            <div className="flex flex-col gap-3">
-              {questions.map((q, idx) => (
-                <div key={idx} className="bg-gray-50 border border-gray-100 rounded-lg p-4 flex gap-3 items-start">
-                  <div className="flex-1">
-                    <div className="font-medium text-gray-900 mb-1">Вопрос {idx+1}/{questions.length}</div>
-                    <textarea value={q} onChange={e=>updateQuestion(idx, e.target.value)} className="input-field mb-1 text-base" rows={2} />
-                    <input className="input-field text-xs mb-1" placeholder="Ключевые точки для оценки (опционально)" />
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>Вопрос нельзя пропустить</span>
-                    </div>
-                  </div>
-                  <button type="button" className="p-2 text-red-500 hover:text-red-700" onClick={()=>removeQuestion(idx)}>
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
+            {questions.length === 0 ? (
+              <div className="text-gray-400 text-sm">Вопросы не добавлены</div>
+            ) : (
+              <ul className="flex flex-col gap-2">
+                {questions.map((q, idx) => (
+                  <li key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={q}
+                      onChange={e => updateQuestion(idx, e.target.value)}
+                      className="input-field flex-1"
+                      placeholder={`Вопрос #${idx+1}`}
+                    />
+                    <button type="button" className="btn-secondary px-2 py-1 text-xs" onClick={() => removeQuestion(idx)}><Trash2 className="h-4 w-4" /></button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
           {/* Кнопки */}
-          <div className="flex flex-col md:flex-row justify-end gap-4 mt-2">
-            <button type="button" onClick={()=>navigate('/vacancies')} className="btn-secondary h-12 px-8 text-base font-semibold">Отмена</button>
-            <button type="submit" disabled={isLoading} className="btn-primary h-12 px-10 text-base font-semibold">{isLoading ? 'Создание...' : 'Сохранить изменения'}</button>
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary h-12 px-10 text-lg" disabled={isLoading}>{isLoading ? 'Сохраняем...' : (location.state?.vacancy ? 'Сохранить' : 'Создать')}</button>
           </div>
         </form>
       </div>

@@ -1,15 +1,48 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2 } from 'lucide-react';
-import vacanciesData from '../mocks/vacancies.json';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2, Copy, CheckCircle, Clock, AlertCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
+// import vacanciesData from '../mocks/vacancies.json';
+import { mockApi } from '../mocks/mockApi';
+import type { Position } from '../client/models/position';
+import type { Interview } from '../client/models/interview';
+import type { Candidate } from '../client/models/candidate';
+
+const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+
+// Функция для форматирования дат
+const formatDate = (dateString?: string) => {
+  if (!dateString) return '-';
+  return new Date(dateString).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
+// Словарь для статусов
+const interviewStatusMap = {
+  not_started: { text: 'Не начато', icon: <AlertCircle className="h-4 w-4 text-gray-400" />, color: 'bg-gray-400' },
+  in_progress: { text: 'В процессе', icon: <Clock className="h-4 w-4 text-yellow-500" />, color: 'bg-yellow-400' },
+  successful: { text: 'Успешно', icon: <CheckCircle className="h-4 w-4 text-green-500" />, color: 'bg-green-500' },
+  unsuccessful: { text: 'Неуспешно', icon: <AlertCircle className="h-4 w-4 text-red-500" />, color: 'bg-red-500' },
+};
 
 const VacancyList: React.FC = () => {
   // Состояния фильтрации и выбранной вакансии
   const [searchTerm, setSearchTerm] = useState('');
   const [tab, setTab] = useState<'all' | 'my'>('all');
-  const [selectedId, setSelectedId] = useState<number | null>(vacanciesData[0]?.id || null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
+  const [vacancies, setVacancies] = useState<Position[]>([]);
+  const [interviews, setInterviews] = useState<Interview[]>([]);
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [interviewsLoading, setInterviewsLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Вкладки для деталей вакансии
   const vacancyTabs = [
@@ -20,13 +53,59 @@ const VacancyList: React.FC = () => {
   ];
   const [vacancyTab, setVacancyTab] = useState('candidates');
 
-  // Фильтрация вакансий (моки)
-  const filteredVacancies = vacanciesData.filter(vacancy =>
-    vacancy.title.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    setLoading(true);
+    (async () => {
+      let data;
+      if (useMock) {
+        data = await mockApi.getPositions({ status: 'active', search: searchTerm });
+      } else {
+        // TODO: подключить реальный API-клиент
+        data = await mockApi.getPositions({ status: 'active', search: searchTerm });
+      }
+      setVacancies(data.items);
+      // Если перешли по ссылке с dashboard, выбираем нужную вакансию
+      const locationState = location.state as { positionId?: string };
+      if (locationState?.positionId) {
+        setSelectedId(locationState.positionId);
+      } else if (!selectedId && data.items.length > 0) {
+        setSelectedId(data.items[0].id);
+      }
+      setLoading(false);
+    })();
+    // eslint-disable-next-line
+  }, [searchTerm]);
 
-  // Найти выбранную вакансию
+  useEffect(() => {
+    if (selectedId) {
+      setInterviewsLoading(true);
+      (async () => {
+        const [interviewsData, candidatesData] = await Promise.all([
+          mockApi.getPositionInterviews(selectedId),
+          mockApi.getPositions({ status: 'active' }).then(res =>
+             res.items.find(p => p.id === selectedId)?.candidates || []
+          )
+        ]);
+        setInterviews(interviewsData);
+        setCandidates(candidatesData as Candidate[]);
+        setInterviewsLoading(false);
+      })();
+    }
+  }, [selectedId]);
+
+  const filteredVacancies = vacancies;
   const selectedVacancy = filteredVacancies.find(v => v.id === selectedId) || filteredVacancies[0];
+
+  // Статистика по собеседованиям
+  const interviewStats = interviews.reduce(
+    (acc, interview) => {
+      if (interview.status === 'finished') acc.finished++;
+      else if (interview.status === 'in_progress') acc.inProgress++;
+      else if (interview.status === 'not_started') acc.notStarted++;
+      return acc;
+    },
+    { finished: 0, inProgress: 0, notStarted: 0 }
+  );
 
   // Открыть форму редактирования (переход с передачей данных)
   const handleEdit = () => {
@@ -43,13 +122,17 @@ const VacancyList: React.FC = () => {
   };
 
   // Добавлю функцию handleDelete для удаления вакансии из списка.
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     if (window.confirm('Вы уверены, что хотите удалить вакансию?')) {
-      // Здесь должен быть вызов API или обновление состояния, если бы был сервер
       setSelectedId(null);
-      // В реальном проекте — обновить данные через setState или refetch
-      window.location.reload(); // временно, чтобы обновить список после удаления
+      window.location.reload();
     }
+  };
+
+  const handleCopyLink = (interviewId: string) => {
+    const link = `${window.location.origin}/interview/${interviewId}`;
+    navigator.clipboard.writeText(link);
+    toast.success('Ссылка на собеседование скопирована!');
   };
 
   return (
@@ -70,7 +153,7 @@ const VacancyList: React.FC = () => {
               className={`flex-1 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tab === 'all' ? 'bg-primary-50 text-primary-700 border-primary-200 shadow' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
               onClick={() => setTab('all')}
             >
-              Все <span className="ml-1">{vacanciesData.length}</span>
+              Все <span className="ml-1">{vacancies.length}</span>
             </button>
             <button
               className={`flex-1 py-1.5 rounded-full text-sm font-medium border transition-all duration-150 ${tab === 'my' ? 'bg-primary-50 text-primary-700 border-primary-200 shadow' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}
@@ -94,7 +177,9 @@ const VacancyList: React.FC = () => {
           </div>
           {/* Список вакансий */}
           <div className="flex-1 overflow-y-auto">
-            {filteredVacancies.length === 0 ? (
+            {loading ? (
+              <div className="text-center text-gray-400 py-12">Загрузка...</div>
+            ) : filteredVacancies.length === 0 ? (
               <div className="text-center text-gray-400 py-12">Вакансии не найдены</div>
             ) : (
               <ul className="flex flex-col gap-2 px-2 py-1">
@@ -110,26 +195,17 @@ const VacancyList: React.FC = () => {
                       {/* Левая часть: текст */}
                       <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                         <div className="font-semibold text-base text-gray-900 truncate group-hover:underline" title={vacancy.title}>{vacancy.title}</div>
-                        <div className="text-xs text-gray-400 truncate" title={vacancy.topics.join(', ')}>{vacancy.topics.join(', ')}</div>
+                        <div className="text-xs text-gray-400 truncate" title={vacancy.topics?.join(', ')}>{vacancy.topics?.join(', ')}</div>
                       </div>
                       {/* Правая часть: индикаторы и счетчик */}
                       <div className="flex flex-col items-end gap-1 min-w-[56px]">
                         <span className="flex w-16 h-5 rounded-lg overflow-hidden border border-gray-200">
-                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-green-500" title="Прошли успешно" style={{backgroundColor:'rgba(34,197,94,0.95)'}}>{(() => {
-                            const success = vacancy.candidates.filter(c => c.status === 'успешно' || c.status === 'завершено').length;
-                            return success;
-                          })()}</span>
-                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-yellow-300" title="В процессе" style={{color:'#b45309'}}>{(() => {
-                            const pending = vacancy.candidates.filter(c => c.status === 'ожидает' || c.status === 'в процессе').length;
-                            return pending;
-                          })()}</span>
-                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-red-400" title="Провалили" style={{backgroundColor:'rgba(239,68,68,0.90)'}}>{(() => {
-                            const fail = vacancy.candidates.filter(c => c.status === 'провал' || c.status === 'неуспешно').length;
-                            return fail;
-                          })()}</span>
+                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-green-500" title="Успешно">{vacancy.stats?.interviewsSuccessful || 0}</span>
+                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-yellow-400" title="В процессе">{vacancy.stats?.interviewsInProgress || 0}</span>
+                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-red-500" title="Неуспешно">{vacancy.stats?.interviewsUnsuccessful || 0}</span>
                         </span>
                         <div className="flex items-center gap-1 mt-0.5">
-                          <span className="text-xs text-gray-400 font-medium">{vacancy.candidates.length}</span>
+                          <span className="text-xs text-gray-400 font-medium">{vacancy.stats?.interviewsTotal || 0}</span>
                           <MoreVertical className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition" />
                         </div>
                       </div>
@@ -155,9 +231,9 @@ const VacancyList: React.FC = () => {
                   <div
                     className="text-xs text-gray-500 mt-1 truncate"
                     style={{ minHeight: '20px' }}
-                    title={selectedVacancy.topics.join(', ')}
+                    title={selectedVacancy.topics?.join(', ')}
                   >
-                    {selectedVacancy.topics.join(', ')}
+                    {selectedVacancy.topics?.join(', ')}
                   </div>
                 </div>
                 <div className="flex gap-3 items-center">
@@ -178,15 +254,15 @@ const VacancyList: React.FC = () => {
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-normal text-left mb-1">Топики</div>
-                    <div className="font-medium text-base text-left truncate max-w-[420px]" title={selectedVacancy.topics.join(', ')}>{selectedVacancy.topics.join(', ')}</div>
+                    <div className="font-medium text-base text-left truncate max-w-[420px]" title={selectedVacancy.topics?.join(', ')}>{selectedVacancy.topics?.join(', ')}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-normal text-left mb-1">min балл</div>
                     <div className="font-medium text-base text-left pl-2">{selectedVacancy.minScore}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 font-normal text-left mb-1">Создано</div>
-                    <div className="font-medium text-base text-left">{selectedVacancy.createdAt}</div>
+                    <div className="text-xs text-gray-500 font-normal text-center mb-1">Создано</div>
+                    <div className="font-medium text-base text-center truncate" title={selectedVacancy.createdAt}>{formatDate(selectedVacancy.createdAt)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-normal text-left mb-1">avg балл</div>
@@ -212,69 +288,71 @@ const VacancyList: React.FC = () => {
                 {/* Контент вкладок */}
                 {vacancyTab === 'candidates' && (
                   <>
-                    {/* Публичная ссылка и настройки */}
-                    <div className="flex items-center gap-2 max-w-[480px] w-full mb-4">
-                      <span className="text-xs text-gray-500 whitespace-nowrap">Публичная ссылка</span>
-                      {(() => {
-                        const interviewId = selectedVacancy.publicLink.split('/').pop();
-                        const fullUrl = `${window.location.origin}/interview/${interviewId}`;
-                        return (
-                          <>
-                            <Link
-                              to={`/interview/${interviewId}`}
-                              className="flex items-center gap-1 text-primary-700 hover:text-primary-900 underline text-xs font-medium px-2 py-1 rounded transition-colors truncate max-w-[400px] w-full"
-                              title={fullUrl}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <Link2 className="h-4 w-4 flex-shrink-0" />
-                              <span className="truncate">{`/interview/${interviewId}`}</span>
-                            </Link>
-                            <button
-                              className="btn-secondary h-7 min-h-0 text-xs px-2 py-0.5 rounded"
-                              type="button"
-                              onClick={() => {
-                                navigator.clipboard.writeText(fullUrl);
-                              }}
-                            >Скопировать</button>
-                          </>
-                        );
-                      })()}
+                    <div className="flex items-center gap-6 mb-4">
+                      <div className="text-sm">Всего: <span className="font-bold">{interviews.length}</span></div>
+                      <div className="text-sm">Завершено: <span className="font-bold text-green-600">{interviewStats.finished}</span></div>
+                      <div className="text-sm">В процессе: <span className="font-bold text-yellow-600">{interviewStats.inProgress}</span></div>
                     </div>
-                    {/* Кандидаты (моки) */}
-                    <div>
-                      <div className="font-semibold text-gray-900 mb-2">Кандидаты</div>
-                      <div className="flex flex-wrap gap-2 mb-2 text-xs text-gray-500">
-                        <span>Все {selectedVacancy.candidates.length}</span>
-                        <span>Успешные {selectedVacancy.candidates.filter(c=>c.status==='успешно').length}</span>
-                        <span>Провал {selectedVacancy.candidates.filter(c=>c.status==='провал').length}</span>
-                        <span>Ожидают {selectedVacancy.candidates.filter(c=>c.status==='ожидает').length}</span>
-                        <span>Завершено {selectedVacancy.candidates.filter(c=>c.status==='завершено').length}</span>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        {selectedVacancy.candidates.length === 0 ? (
-                          <div className="text-gray-400 text-sm">Нет кандидатов</div>
-                        ) : (
-                          <table className="min-w-full w-full table-fixed text-sm">
-                            <thead>
-                              <tr className="text-gray-500">
-                                <th className="text-left font-normal w-1/2 min-w-[120px] px-2">Имя</th>
-                                <th className="text-left font-normal w-1/6 min-w-[70px] px-2">Оценка</th>
-                                <th className="text-left font-normal w-1/3 min-w-[90px] px-2">Статус</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {selectedVacancy.candidates.map((c, idx) => (
-                                <tr key={idx} className="text-gray-900">
-                                  <td className="truncate px-2" title={c.name}>{c.name}</td>
-                                  <td className="px-2">{c.score ?? '-'}</td>
-                                  <td className="truncate px-2" title={c.status}>{c.status}</td>
+                    {interviewsLoading ? (
+                      <div>Загрузка собеседований...</div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кандидат</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата начала</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата окончания</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Оценка</th>
+                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Действие</th>
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {interviews.map(interview => {
+                              const candidate = candidates.find(c => c.id === interview.candidateId);
+                              const statusKey = (interview.result || interview.status) as keyof typeof interviewStatusMap;
+                              const statusInfo = interviewStatusMap[statusKey];
+
+                              return (
+                                <tr key={interview.id}>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    <div className="text-sm font-medium text-gray-900">{candidate?.name || 'Неизвестный кандидат'}</div>
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap">
+                                    {statusInfo && (
+                                      <span className="flex items-center gap-2 text-sm text-gray-700">
+                                        {statusInfo.icon}
+                                        {statusInfo.text}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {formatDate(interview.startedAt)}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    {formatDate(interview.finishedAt)}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    {interview.aiScore || '-'}
+                                  </td>
+                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                    <div className="flex items-center gap-3">
+                                      <Link to={`/interview/${interview.id}`} title="Перейти к интервью">
+                                        <Link2 className="h-5 w-5 text-primary-500 hover:text-primary-700" />
+                                      </Link>
+                                      <button onClick={() => handleCopyLink(interview.id)} title="Скопировать ссылку">
+                                        <Copy className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                                      </button>
+                                    </div>
+                                  </td>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        )}
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
-                    </div>
+                    )}
                   </>
                 )}
                 {vacancyTab === 'description' && (

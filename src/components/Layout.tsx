@@ -35,12 +35,15 @@ const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const isVacancyPage = location.pathname.startsWith('/vacancies');
-  const isInterviewSession = location.pathname.startsWith('/interview/session');
+  const isInterviewSession = location.pathname.startsWith('/interview');
+  const isInterviewCreatePage = location.pathname === '/interviews/create';
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
     return location.pathname === path;
   };
+
+  console.log('Layout render:', { location: location.pathname, isInterviewSession, isInterviewCreatePage });
 
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -109,10 +112,17 @@ const Layout: React.FC = () => {
           </div>
         </div>
         {/* Page content */}
-        <main className="flex-1 bg-gray-50">
-          <div className={isInterviewSession ? 'w-full py-8' : 'mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8'}>
-            <Outlet />
-          </div>
+        <main className="flex-1 bg-gray-50 flex flex-col">
+          {isInterviewSession ? (
+            <div className="flex justify-center items-center flex-grow bg-gray-50">
+              <Outlet />
+            </div>
+          ) : (
+            <div className={`mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8 ${isInterviewCreatePage ? 'flex-grow flex flex-col' : ''}`}>
+              <div className="text-red-500 mb-4">DEBUG: Layout content area - Path: {location.pathname}</div>
+              <Outlet />
+            </div>
+          )}
         </main>
       </div>
     </div>

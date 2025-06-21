@@ -747,6 +747,8 @@ components:
           format: uuid
         title:
           type: string
+        company:
+          type: string
         description:
           type: string
         status:
@@ -772,7 +774,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Candidate'
-      required: [id, title, status, createdAt]
+        topics:
+          type: array
+          items:
+            type: string
+          description: "Ключевые темы/теги позиции"
+        minScore:
+          type: number
+          format: float
+          description: "Минимальный проходной балл"
+        avgScore:
+          type: number
+          format: float
+          description: "Средний балл по позиции"
+      required: [id, title, company, status, createdAt]
     PositionCreateRequest:
       type: object
       properties:
@@ -811,14 +826,18 @@ components:
       properties:
         positionId:
           type: string
-        candidatesTotal:
+        interviewsTotal:
           type: integer
-        candidatesInProgress:
+          description: "Всего собеседований"
+        interviewsSuccessful:
           type: integer
-        candidatesFinished:
+          description: "Успешно завершенные"
+        interviewsInProgress:
           type: integer
-        candidatesHired:
+          description: "В процессе"
+        interviewsUnsuccessful:
           type: integer
+          description: "Неуспешно завершенные"
     Question:
       type: object
       properties:
@@ -868,6 +887,10 @@ components:
         id:
           type: string
           format: uuid
+        firstName:
+          type: string
+        lastName:
+          type: string
         name:
           type: string
         email:
@@ -887,7 +910,7 @@ components:
         updatedAt:
           type: string
           format: date-time
-      required: [id, name, status, positionId]
+      required: [id, firstName, lastName, status, positionId]
     CandidateCreateRequest:
       type: object
       properties:
@@ -915,7 +938,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
         candidateId:
           type: string
         positionId:
@@ -923,6 +945,9 @@ components:
         status:
           type: string
           enum: [not_started, in_progress, finished]
+        result:
+          type: string
+          enum: [successful, unsuccessful]
         startedAt:
           type: string
           format: date-time
@@ -939,7 +964,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/InterviewAnswer'
-      required: [id, candidateId, positionId, status]
+      required:
+        - id
+        - candidateId
+        - positionId
+        - status
+        - startedAt
     InterviewAnswer:
       type: object
       properties:

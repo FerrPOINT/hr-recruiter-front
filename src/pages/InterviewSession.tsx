@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, Send, Loader2, CheckCircle, Mail, Globe, Users, Info, Headphones } from 'lucide-react';
+import { Mic, Send, Loader2, CheckCircle, Mail, Globe, Users, Info, Headphones, Video, Briefcase, Phone } from 'lucide-react';
+import { useParams } from 'react-router-dom';
+import { mockApi } from '../mocks/mockApi';
+import type { Branding } from '../client/models/branding';
+import type { Position } from '../client/models/position';
+import type { Candidate } from '../client/models/candidate';
+import type { Interview } from '../client/models/interview';
+import type { Question } from '../client/models/question';
+import { StatusEnum } from '../client/models/interview';
 
-// Моки вопросов интервью
-const MOCK_QUESTIONS = [
-  'Как вы используете горутины для достижения конкурентности в Go?',
-  'Что такое каналы в Go и как они работают?',
-  'Как вы обрабатываете ошибки в Go?',
-  'Расскажите о проекте, где вы использовали Go. Какие были основные задачи?',
-  'Как вы справляетесь с дедлайнами и приоритизацией задач?'
-];
-
-// Моковые сообщения для приветствия и инструкций
+// --- UI CONSTANTS ---
+const MIC_TEST_DURATION = 5; // секунд для теста микрофона
 const INTRO_MESSAGES = [
   { from: 'ai', text: 'Привет 👋' },
   { from: 'ai', text: 'Я твой виртуальный интервьюер.' },
@@ -18,310 +18,412 @@ const INTRO_MESSAGES = [
   { from: 'ai', text: 'Нажми кнопку «Тест микрофона», чтобы проверить микрофон.' },
 ];
 
-const MIC_TEST_DURATION = 5; // секунд для теста микрофона
-
-// Моки данных приглашения
-const INVITE = {
-  candidate: 'Александр Жуков',
-  company: 'azhukov',
-  position: 'Go разработчик',
-  language: 'Русский',
-  questions: 5,
-};
-
-const CHECKLIST = [
-  { icon: <Globe className="h-6 w-6 text-orange-500" />, text: 'Вы используете последнюю версию браузера Chrome или Edge' },
-  { icon: <Headphones className="h-6 w-6 text-orange-500" />, text: 'Ваши колонки или наушники включены и работают' },
-  { icon: <Mic className="h-4 w-4 text-orange-500" />, text: 'Ваш микрофон включен и работает' },
-  { icon: <Info className="h-6 w-6 text-orange-500" />, text: 'Вы в тихом помещении и готовы сконцентрироваться на собеседовании' },
-];
+const icons = [<Globe className="h-6 w-6 text-orange-500" />, <Headphones className="h-6 w-6 text-orange-500" />, <Mic className="h-4 w-4 text-orange-500" />, <Info className="h-6 w-6 text-orange-500" />];
 
 const InterviewSession: React.FC = () => {
-  // Состояния чата
-  const [messages, setMessages] = useState<{from: string, text: string}[]>([]);
-  const [step, setStep] = useState<'intro' | 'mic-test' | 'mic-test-done' | 'question' | 'final'>('intro');
-  const [currentQuestion, setCurrentQuestion] = useState(0);
+  const params = useParams<{ sessionId: string }>();
+  const [loading, setLoading] = useState(true);
+  type InterviewStep = 'invite' | 'intro' | 'mic-test' | 'mic-test-done' | 'question' | 'final';
+  const [step, setStep] = useState<InterviewStep>('invite');
+
+  // Data states
+  const [branding, setBranding] = useState<Branding | null>(null);
+  const [position, setPosition] = useState<Position | null>(null);
+  const [candidate, setCandidate] = useState<Candidate | null>(null);
+  const [interview, setInterview] = useState<Interview | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [checklist, setChecklist] = useState<{ icon: React.ReactNode, text: string }[]>([]);
+  const [inviteInfo, setInviteInfo] = useState<{ language: string; questionsCount: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Chat & Recording states
+  const [messages, setMessages] = useState<{ from: string, text: string }[]>([]);
   const [isRecording, setIsRecording] = useState(false);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [userAudio, setUserAudio] = useState<string | null>(null); // base64 или blob, мок
-  const [userText, setUserText] = useState('');
-  const [introDone, setIntroDone] = useState(false);
   const [recordTimer, setRecordTimer] = useState(0);
-  const recordDuration = 30; // секунд
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
-  const [showInvite, setShowInvite] = useState(true);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [currentQuestion, setCurrentQuestion] = useState(0);
   const [consent, setConsent] = useState(false);
-  const [showFinalBlock, setShowFinalBlock] = useState(false);
+
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  const ICONS = {
+    checklist: [<Video className="h-6 w-6 text-primary-500" />, <Headphones className="h-6 w-6 text-primary-500" />, <Mic className="h-6 w-6 text-primary-500" />, <Info className="h-6 w-6 text-primary-500" />],
+    invite: {
+      candidate: <Users className="h-5 w-5 mr-3 text-primary-200" />,
+      language: <Globe className="h-5 w-5 mr-3 text-primary-200" />,
+      questions: <Info className="h-5 w-5 mr-3 text-primary-200" />,
+    }
+  };
+
+  // --- DATA FETCHING ---
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { sessionId } = params;
+        if (!sessionId) {
+          setError('Некорректный идентификатор сессии.');
+          setLoading(false);
+          return;
+        }
+        const interviewData = await mockApi.getInterview(sessionId);
+        if (!interviewData) {
+          setError('Собеседование не найдено.');
+          setLoading(false);
+          return;
+        }
+        setInterview(interviewData);
+        const [checklistData, inviteData, candidateData, positionData, questionsData, brandingData] = await Promise.all([
+          mockApi.getChecklist(),
+          mockApi.getInviteInfo(),
+          mockApi.getCandidate(interviewData.candidateId),
+          mockApi.getPosition(interviewData.positionId),
+          mockApi.getQuestions(interviewData.positionId),
+          mockApi.getBranding(),
+        ]);
+        setChecklist(checklistData.map((item, index) => ({ ...item, icon: ICONS.checklist[index] })));
+        setInviteInfo(inviteData);
+        setCandidate(candidateData || null);
+        setPosition(positionData || null);
+        setQuestions(questionsData);
+        setBranding(brandingData);
+      } catch (e) {
+        setError('Ошибка загрузки данных.');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [params]);
 
   // Sleep-функция
   function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
   }
 
-  // Добавляет сообщения по одному с задержкой 2 секунды между каждым
-  async function pushMessagesWithDelay(msgsArr: {from: string, text: string}[]) {
+  // Добавляет сообщения по одному с задержкой
+  async function pushMessagesWithDelay(msgsArr: { from: string, text: string }[]) {
     for (const msg of msgsArr) {
       setMessages(msgs => [...msgs, msg]);
-      await sleep(2000);
+      await sleep(1500);
     }
   }
 
-  // Запуск intro-сообщений только после нажатия "Начать"
-  const startIntro = () => {
+  // Main flow handler
+  const handleStart = async () => {
     setStep('intro');
-    setMessages([]);
-    setIntroDone(false);
-    let cancelled = false;
-    (async () => {
-      for (let i = 0; i < INTRO_MESSAGES.length; i++) {
-        if (cancelled) break;
-        setMessages(msgs => [...msgs, INTRO_MESSAGES[i]]);
-        await sleep(2000);
-      }
-      if (!cancelled) setIntroDone(true);
-    })();
-    return () => { cancelled = true; };
+    await pushMessagesWithDelay([
+      { from: 'ai', text: `Привет, ${candidate?.firstName || 'кандидат'}! 👋` },
+      { from: 'ai', text: 'Я твой виртуальный помощник для интервью. Я задам тебе несколько вопросов.' },
+      { from: 'ai', text: 'Сначала давай убедимся, что твой микрофон работает. Нажми кнопку ниже.' },
+    ]);
   };
 
-  // Автоскролл вниз
-  useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages]);
-
-  // Скролл вниз при появлении финального блока
-  useEffect(() => {
-    if (showFinalBlock && chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [showFinalBlock]);
-
-  // Таймер записи (универсальный для mic-test и question)
-  useEffect(() => {
-    let timer: NodeJS.Timeout;
-    if (isRecording && recordTimer > 0) {
-      timer = setTimeout(() => setRecordTimer(t => t - 1), 1000);
-    } else if (isRecording && recordTimer === 0) {
-      if (step === 'mic-test') {
-        handleStopMicTest();
-      } else {
-        handleStopRecording();
-      }
-    }
-    return () => clearTimeout(timer);
-  }, [isRecording, recordTimer, step]);
-
-  // Мок: тест микрофона (теперь запускает запись)
-  const handleMicTest = () => {
+  const handleMicTestStart = () => {
     setStep('mic-test');
     setIsRecording(true);
     setRecordTimer(MIC_TEST_DURATION);
-    setUserAudio(null);
-    setUserText('');
   };
-  // Завершение теста микрофона
-  const handleStopMicTest = () => {
+
+  const handleMicTestStop = async () => {
     setIsRecording(false);
-    (async () => {
-      await sleep(500);
-      await pushMessagesWithDelay([
-        { from: 'user', text: 'Раз-раз. Тест микрофона.' },
-        { from: 'ai', text: 'Всё в порядке! Я слышу тебя хорошо. Когда будешь готов — нажми кнопку ниже, чтобы начать интервью.' },
-        { from: 'ai', text: 'Как отвечать на вопросы: внимательно слушай, нажимай «Записать ответ», говори, затем отправляй.' }
-      ]);
-      setStep('mic-test-done');
-    })();
+    setStep('mic-test-done');
+    await pushMessagesWithDelay([
+      { from: 'user', text: 'Раз-раз, проверка связи.' },
+      { from: 'ai', text: 'Отлично, я тебя слышу! Можем начинать.' },
+    ]);
   };
 
-  // Начать интервью
-  const handleStartInterview = () => {
+  const handleStartInterview = async () => {
     setStep('question');
-    (async () => {
+    setMessages([]); // Clear chat for questions
+    if (questions && questions.length > 0) {
       await pushMessagesWithDelay([
-        { from: 'ai', text: `Вопрос 1 из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[0]}` }
+        { from: 'ai', text: `Отлично, начинаем. Вопрос 1 из ${questions.length}.` },
+        { from: 'ai', text: questions[0].text }
       ]);
-    })();
+    } else {
+      await pushMessagesWithDelay([
+        { from: 'ai', text: 'Для этой вакансии пока нет вопросов. Интервью завершено.' }
+      ]);
+      setStep('final');
+    }
   };
-
-  // Мок: начать запись
+  
   const handleStartRecording = () => {
     setIsRecording(true);
-    setUserAudio(null);
-    setUserText('');
-    setRecordTimer(recordDuration);
+    setRecordTimer((position as any)?.answerTime || 60); // Используем время из вакансии или 60с по умолчанию
   };
-  // Мок: остановить запись и "отправить" на транскрибацию
-  const handleStopRecording = () => {
+
+  const handleStopRecording = async () => {
     setIsRecording(false);
-    setIsTranscribing(true);
     setRecordTimer(0);
-    // Мок: транскрибация
-    setTimeout(() => {
-      setIsTranscribing(false);
-      setUserText('Мой ответ на вопрос...');
-      (async () => {
-        await pushMessagesWithDelay([
-          { from: 'user', text: 'Мой ответ на вопрос...' },
-          { from: 'ai', text: 'Ответ получен. Переходим к следующему вопросу.' }
-        ]);
-        // Следующий вопрос или финал
-        if (currentQuestion + 1 < MOCK_QUESTIONS.length) {
-          setCurrentQuestion(q => q + 1);
-          await pushMessagesWithDelay([
-            { from: 'ai', text: `Вопрос ${currentQuestion + 2} из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[currentQuestion + 1]}` }
-          ]);
-        } else {
-          setStep('final');
-          await pushMessagesWithDelay([
-            { from: 'ai', text: 'Спасибо! Интервью завершено. Результаты будут отправлены рекрутеру.' }
-          ]);
-          setShowFinalBlock(true);
-        }
-      })();
-    }, 1500);
+    setIsTranscribing(true);
+
+    // Имитация более реалистичного ответа
+    const mockAnswer = `(Мок-ответ) Я считаю, что ${questions[currentQuestion].text.toLowerCase().replace('?', '...')}`;
+    await sleep(1500); // Имитация обработки
+    await pushMessagesWithDelay([{ from: 'user', text: mockAnswer }]);
+    setIsTranscribing(false);
+
+    const nextQuestionIndex = currentQuestion + 1;
+    if (nextQuestionIndex < questions.length) {
+      setCurrentQuestion(nextQuestionIndex);
+      await pushMessagesWithDelay([
+        { from: 'ai', text: 'Отлично, спасибо за ответ.' },
+        { from: 'ai', text: `Следующий вопрос ${nextQuestionIndex + 1} из ${questions.length}:` },
+        { from: 'ai', text: questions[nextQuestionIndex].text }
+      ]);
+    } else {
+      setStep('final');
+      await pushMessagesWithDelay([
+        { from: 'ai', text: 'Спасибо за ваши ответы. Это был последний вопрос.' },
+        { from: 'ai', text: 'Мы внимательно изучим информацию и вернемся с обратной связью в ближайшее время.' },
+        { from: 'ai', text: 'Хорошего дня! 👋' }
+      ]);
+    }
+  };
+  
+  // Timer effect
+  useEffect(() => {
+    if (!isRecording || recordTimer <= 0) return;
+    const timerId = setTimeout(() => setRecordTimer(t => t - 1), 1000);
+    if (recordTimer === 1) {
+      if (step === 'mic-test') setTimeout(handleMicTestStop, 1000);
+      else if (step === 'question') setTimeout(handleStopRecording, 1000);
+    }
+    return () => clearTimeout(timerId);
+  }, [isRecording, recordTimer, step]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // --- RENDER ---
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <Loader2 className="animate-spin h-12 w-12 text-primary-500 mx-auto mb-4" />
+          <div className="text-white">Загрузка интервью...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="text-red-500 text-xl mb-4">{error}</div>
+          <div className="text-gray-400 text-sm">sessionId: {params.sessionId}</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!candidate || !position) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-gray-900">
+        <div className="text-center">
+          <div className="text-red-500 text-xl mb-4">Ошибка загрузки данных</div>
+          <div className="text-gray-400 text-sm">candidate: {candidate ? 'loaded' : 'null'}</div>
+          <div className="text-gray-400 text-sm">position: {position ? 'loaded' : 'null'}</div>
+          <div className="text-gray-400 text-sm">sessionId: {params.sessionId}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Render welcome screen
+  const renderWelcomeScreen = () => {
+    if (!candidate || !position || step !== 'invite') return null;
+    return (
+      <div className="w-full max-w-2xl bg-gray-800/80 backdrop-blur-sm rounded-2xl shadow-2xl p-8 md:p-12 border border-gray-700">
+        <div className="text-center mb-10">
+          <span className="text-5xl font-extrabold tracking-tight text-wmt-orange mb-6 block">
+            {branding?.companyName || 'WMT Рекрутер'}
+          </span>
+          <h1 className="text-2xl font-semibold text-white leading-tight">
+            Собеседование на позицию<br />
+            <span className="text-3xl font-bold text-wmt-orange">"{position.title}"</span>
+          </h1>
+        </div>
+        <div className="bg-gray-900/50 rounded-lg p-6 mb-8">
+          <h2 className="font-semibold text-lg mb-6 text-center text-gray-300">Детали</h2>
+          <div className="grid grid-cols-3 gap-4 text-center divide-x divide-gray-600">
+            <div className="px-2">
+              <div className="text-sm text-gray-400 mb-1">Кандидат</div>
+              <div className="text-lg font-medium text-white truncate">{candidate.name}</div>
+            </div>
+            <div className="px-2">
+              <div className="text-sm text-gray-400 mb-1">Язык</div>
+              <div className="text-lg font-medium text-white">{inviteInfo?.language || 'Русский'}</div>
+            </div>
+            <div className="px-2">
+              <div className="text-sm text-gray-400 mb-1">Вопросов</div>
+              <div className="text-lg font-medium text-white">{questions.length}</div>
+            </div>
+          </div>
+        </div>
+        <div className="mb-8">
+          <h2 className="font-semibold text-lg mb-4 text-center text-gray-300">Чек-лист готовности</h2>
+          <ul className="space-y-3">
+            {checklist.map((item, index) => (
+              <li key={index} className="flex items-center text-gray-300 bg-gray-900/50 rounded-lg p-4">
+                <div className="mr-4 text-wmt-orange">{item.icon}</div>
+                <span>{item.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="flex items-start p-1 mb-6">
+          <input
+            id="consent"
+            type="checkbox"
+            checked={consent}
+            onChange={(e) => setConsent(e.target.checked)}
+            className="h-5 w-5 mt-0.5 flex-shrink-0 bg-gray-700 border-gray-600 rounded text-wmt-orange focus:ring-2 focus:ring-wmt-orange-dark focus:ring-offset-2 focus:ring-offset-gray-800"
+          />
+          <label htmlFor="consent" className="ml-3 text-sm text-gray-400">
+            Я даю согласие на аудио- и видеозапись собеседования, а также на обработку моих персональных данных.
+          </label>
+        </div>
+        <button
+          onClick={handleStart}
+          disabled={!consent}
+          className="w-full text-lg font-bold bg-wmt-orange hover:bg-wmt-orange-dark disabled:bg-gray-700 disabled:text-gray-400 disabled:cursor-not-allowed text-white py-4 rounded-xl transition-all duration-300 shadow-lg shadow-wmt-orange/20 hover:shadow-wmt-orange/40"
+        >
+          Начать собеседование
+        </button>
+      </div>
+    );
   };
 
-  // Кнопка 'Записать ответ' доступна только после появления вопроса в чате
-  const currentQuestionText = `Вопрос ${currentQuestion + 1} из ${MOCK_QUESTIONS.length}: ${MOCK_QUESTIONS[currentQuestion]}`;
-  const lastMessage = messages[messages.length - 1];
-  const canRecordAnswer = step === 'question'
-    && lastMessage && lastMessage.from === 'ai' && lastMessage.text === currentQuestionText
-    && !isRecording && !isTranscribing;
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-[#f0f3ff] to-[#e6eaff] py-4">
-      {/* Фирменный логотип и помощь */}
-      <div className="w-full max-w-2xl flex items-center justify-between px-2 sm:px-4 pt-2 pb-1 mb-2">
-        <div className="text-2xl font-extrabold tracking-tight" style={{color: 'var(--wmt-orange)'}}>
-          WMT Рекрутер
+  // Render questions progress
+  const renderQuestionsProgress = () => {
+    if (!questions.length || step !== 'question') return null;
+    return (
+      <div className="bg-gray-50 border-b p-3 flex-shrink-0">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-medium text-gray-700">Прогресс собеседования</h3>
+          <span className="text-sm text-gray-500">
+            Вопрос {currentQuestion + 1} из {questions.length}
+          </span>
         </div>
-        <a href="#" className="text-[color:var(--wmt-orange)] hover:underline text-sm font-medium">Помощь</a>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div
+            className="bg-primary-500 h-2 rounded-full transition-all duration-300"
+            style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }}
+          ></div>
+        </div>
       </div>
-      {/* Стартовый экран-инвайт */}
-      {showInvite ? (
-        <div className="w-full max-w-2xl bg-white rounded-xl shadow-soft flex flex-col md:flex-row overflow-hidden">
-          {/* Левая часть — приглашение */}
-          <div className="flex-1 p-8 flex flex-col justify-center gap-4 min-w-[320px]">
-            <div className="text-gray-700 text-base mb-1">Привет, <b>{INVITE.candidate}</b></div>
-            <div className="text-gray-900 text-lg font-semibold">azhukov приглашает пройти короткое интервью на вакансию:</div>
-            <div className="text-2xl font-extrabold" style={{color: 'var(--wmt-orange-dark)'}}>{INVITE.position}</div>
-            <div className="flex flex-col gap-1 text-gray-600 text-sm mb-2">
-              <div className="flex items-center gap-2"><Users className="h-4 w-4" /> Компания: <b>{INVITE.company}</b></div>
-              <div className="flex items-center gap-2"><Globe className="h-4 w-4" /> Язык: <b>{INVITE.language}</b></div>
-              <div className="flex items-center gap-2"><CheckCircle className="h-4 w-4" /> Всего вопросов: <b>{INVITE.questions}</b></div>
-            </div>
-            <label className="flex items-center gap-2 text-xs text-gray-500 mt-2">
-              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} className="accent-[color:var(--wmt-orange)]" />
-              Я даю согласие на обработку персональных данных и принимаю <a href="#" className="text-[color:var(--wmt-orange)] hover:underline">Политику конфиденциальности</a>
-            </label>
-            <button
-              className="btn-primary w-full h-12 min-h-[48px] mt-4"
-              disabled={!consent}
-              style={{ opacity: consent ? 1 : 0.6 }}
-              onClick={() => {
-                setShowInvite(false);
-                startIntro();
-              }}
-            >
-              Начать
-            </button>
-          </div>
-          {/* Правая часть — чек-лист */}
-          <div className="flex-1 bg-[#f7f8fa] p-8 flex flex-col justify-center gap-4 min-w-[320px] border-t md:border-t-0 md:border-l border-gray-200">
-            <div className="text-lg font-bold text-gray-900 mb-2 text-center md:text-left">Перед стартом</div>
-            <div className="text-gray-600 text-sm mb-4 text-center md:text-left">Перед началом интервью убедитесь, что:</div>
-            <div className="grid grid-cols-1 gap-3">
-              {CHECKLIST.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3 bg-white rounded-lg shadow-sm px-4 py-3">
-                  {item.icon}
-                  <span className="text-gray-700 text-sm">{item.text}</span>
+    );
+  };
+
+  // --- MAIN RENDER ---
+  return (
+    <div className="min-h-screen bg-gray-900 py-8">
+      <div className="max-w-4xl mx-auto px-4 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+        {/* Show welcome screen */}
+        {(step as InterviewStep) === 'invite' && renderWelcomeScreen()}
+        {/* Main content */}
+        {(step as InterviewStep) !== 'invite' && (
+          <div className="w-full bg-white rounded-lg shadow-sm overflow-hidden h-[calc(100vh-8rem)] flex flex-col">
+            {/* Questions progress bar */}
+            {renderQuestionsProgress()}
+            {/* Chat messages */}
+            <div className="p-4 space-y-4 flex-1 overflow-y-auto">
+              {messages.map((message, index) => (
+                <div
+                  key={index}
+                  className={`flex ${message.from === 'ai' ? 'justify-start' : 'justify-end'}`}
+                >
+                  <div
+                    className={`rounded-lg px-4 py-2 max-w-[80%] ${
+                      message.from === 'ai'
+                        ? 'bg-gray-100 text-gray-800'
+                        : 'bg-primary-500 text-white'
+                    }`}
+                  >
+                    {message.text}
+                  </div>
                 </div>
               ))}
+              <div ref={chatEndRef} />
+            </div>
+            {/* Controls */}
+            <div className="border-t p-4 flex-shrink-0">
+              {(step as InterviewStep) === 'intro' && (
+                <button
+                  onClick={handleMicTestStart}
+                  className="w-full btn-primary py-3"
+                >
+                  Тест микрофона
+                </button>
+              )}
+              {(step as InterviewStep) === 'mic-test' && (
+                <div className="flex items-center justify-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <Mic className="h-6 w-6 text-red-500 animate-pulse" />
+                    <span>Запись... {recordTimer}с</span>
+                  </div>
+                  <button
+                    onClick={handleMicTestStop}
+                    className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center"
+                  >
+                    <div className="w-3 h-3 bg-white rounded-sm mr-2"></div>
+                    Стоп
+                  </button>
+                </div>
+              )}
+              {(step as InterviewStep) === 'mic-test-done' && (
+                <button
+                  onClick={handleStartInterview}
+                  className="w-full btn-primary py-3"
+                >
+                  Начать интервью
+                </button>
+              )}
+              {(step as InterviewStep) === 'question' && !isRecording && !isTranscribing && (
+                <button
+                  onClick={handleStartRecording}
+                  className="w-full btn-primary py-3 flex items-center justify-center"
+                >
+                  <Mic className="h-5 w-5 mr-2" />
+                  Записать ответ
+                </button>
+              )}
+              {(step as InterviewStep) === 'question' && isRecording && (
+                <div className="flex items-center justify-center space-x-4">
+                  <div className="flex items-center space-x-2">
+                    <Mic className="h-6 w-6 text-red-500 animate-pulse" />
+                    <span>Запись... {recordTimer}с</span>
+                  </div>
+                  <button
+                    onClick={handleStopRecording}
+                    className="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center"
+                  >
+                    <div className="w-3 h-3 bg-white rounded-sm mr-2"></div>
+                    Стоп
+                  </button>
+                </div>
+              )}
+              {(step as InterviewStep) === 'question' && isTranscribing && (
+                <div className="flex items-center justify-center space-x-2">
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                  <span>Обработка записи...</span>
+                </div>
+              )}
+              {(step as InterviewStep) === 'final' && (
+                <div className="text-center text-gray-600">
+                  Интервью завершено
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="w-full max-w-2xl bg-white rounded-xl shadow-soft p-0 flex flex-col h-[90vh] max-h-[900px]">
-          {/* Чат */}
-          <div className="flex-1 flex flex-col gap-3 overflow-y-auto px-8 pt-8 pb-4">
-            {messages.map((msg, idx) => (
-              <div key={idx} className={`flex ${msg.from === 'ai' ? 'justify-start' : 'justify-end'}`}>
-                <div className={`rounded-2xl px-4 py-2 max-w-[70%] ${msg.from === 'ai' ? 'bg-gray-100 text-gray-900' : 'bg-primary-100 text-primary-900'}`}>
-                  {msg.text}
-                </div>
-              </div>
-            ))}
-            <div ref={chatEndRef} />
-          </div>
-          {/* Нижняя панель управления */}
-          <div className="px-8 pb-8 pt-4 border-t bg-white flex flex-col gap-2 min-h-[110px] justify-center">
-            {/* Надпись над кнопкой для всех состояний */}
-            {step === 'intro' && introDone && (
-              <div className="text-center text-gray-500 text-base mb-2">Готовы начать тест микрофона?</div>
-            )}
-            {step === 'mic-test' && isRecording && (
-              <div className="text-center text-gray-500 text-base mb-2">Идёт тест микрофона...</div>
-            )}
-            {step === 'mic-test-done' && (
-              <div className="text-center text-gray-500 text-base mb-2">Тест микрофона завершён</div>
-            )}
-            {step === 'question' && !isRecording && !isTranscribing && (
-              <div className="text-center text-gray-500 text-base mb-2">
-                {canRecordAnswer ? 'Готовы записать ответ?' : 'Ожидаем вопрос'}
-              </div>
-            )}
-            {isRecording && step === 'question' && (
-              <div className="text-center text-gray-500 text-base mb-2">Идёт запись... Говорите!</div>
-            )}
-            {isTranscribing && (
-              <div className="text-center text-gray-500 text-base mb-2">Транскрибация ответа...</div>
-            )}
-            {step === 'final' && showFinalBlock && (
-              <div className="flex flex-col items-center gap-2 w-full">
-                <CheckCircle className="h-8 w-8 text-green-500" />
-                <div className="text-lg font-bold text-gray-900">Спасибо за интервью!</div>
-                <div className="text-gray-500 text-sm text-center max-w-xs">
-                  Ваши ответы успешно отправлены рекрутеру. После проверки результатов с вами свяжутся по указанным контактам.<br />
-                  Спасибо за участие и удачи в дальнейшем отборе!
-                </div>
-                <div className="text-gray-400 text-xs mt-2">Вы можете закрыть страницу.</div>
-              </div>
-            )}
-            {step === 'intro' && introDone && (
-              <button className="btn-primary w-full h-12 min-h-[48px]" onClick={handleMicTest}>Тест микрофона</button>
-            )}
-            {step === 'mic-test' && isRecording && (
-              <button className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-red-500 hover:bg-red-600 text-white px-4 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2" style={{maxWidth:'100%'}} onClick={handleStopMicTest}>
-                <Send className="h-5 w-5 mr-2" /> Остановить тест
-                <span className="ml-2 text-sm font-mono bg-gray-200 text-gray-700 rounded px-2 py-0.5 min-w-[36px] text-center">{recordTimer}s</span>
-              </button>
-            )}
-            {step === 'mic-test-done' && (
-              <button className="btn-primary w-full h-12 min-h-[48px]" onClick={handleStartInterview}>Продолжить</button>
-            )}
-            {canRecordAnswer && (
-              <button
-                className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-green-500 hover:bg-green-600 text-white px-4"
-                style={{maxWidth:'100%'}} onClick={handleStartRecording}
-              >
-                <Mic className="h-5 w-5 mr-2" /> Записать ответ
-              </button>
-            )}
-            {isRecording && step === 'question' && (
-              <button className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-red-500 hover:bg-red-600 text-white px-4 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2" style={{maxWidth:'100%'}} onClick={handleStopRecording}>
-                <Send className="h-5 w-5 mr-2" /> Остановить запись и отправить
-                <span className="ml-2 text-sm font-mono bg-gray-200 text-gray-700 rounded px-2 py-0.5 min-w-[36px] text-center">{recordTimer}s</span>
-              </button>
-            )}
-            {isTranscribing && (
-              <button className="w-full h-12 min-h-[48px] flex items-center justify-center gap-2 rounded-lg text-base font-medium transition-colors duration-200 bg-primary-200 text-primary-900 px-4 cursor-not-allowed" style={{maxWidth:'100%'}} disabled>
-                <Loader2 className="animate-spin h-6 w-6" style={{color: 'var(--wmt-orange)'}} /> Транскрибация...
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
