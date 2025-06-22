@@ -59,11 +59,20 @@ const Stats: React.FC = () => {
       setLoading(true);
       try {
         if (useMock) {
-          const [statsData, interviewsData] = await Promise.all([
-            mockApi.getStats(),
+          const rawStats = await mockApi.getStats();
+          const [interviewsData] = await Promise.all([
             mockApi.getInterviewStats(),
           ]);
-          setStats(statsData || []);
+          
+          // Convert stats to the expected format
+          const statsData = [
+            { name: 'Активные вакансии', label: 'Активные вакансии', value: rawStats.totalCandidates || 0, delta: `+${Math.floor(Math.random() * 3)}`, icon: 'briefcase' },
+            { name: 'Всего кандидатов', label: 'Всего кандидатов', value: rawStats.totalCandidates || 0, delta: `+${Math.floor(Math.random() * 10)}`, icon: 'users' },
+            { name: 'Успешных интервью', label: 'Успешных интервью', value: rawStats.successfulInterviews || 0, delta: `+${Math.floor(Math.random() * 5)}`, icon: 'check' },
+            { name: 'Средний балл', label: 'Средний балл', value: rawStats.successRate ? `${rawStats.successRate}%` : '7.8', delta: '+0.1', icon: 'trending-up' },
+          ];
+          
+          setStats(statsData);
           setRecentInterviews(interviewsData || []);
         } else {
           // TODO: Real API calls

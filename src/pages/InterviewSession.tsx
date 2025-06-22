@@ -7,7 +7,6 @@ import type { Position } from '../client/models/position';
 import type { Candidate } from '../client/models/candidate';
 import type { Interview } from '../client/models/interview';
 import type { Question } from '../client/models/question';
-import { StatusEnum } from '../client/models/interview';
 
 // --- UI CONSTANTS ---
 const MIC_TEST_DURATION = 5; // секунд для теста микрофона
@@ -75,15 +74,26 @@ const InterviewSession: React.FC = () => {
           return;
         }
         setInterview(interviewData);
-        const [checklistData, inviteData, candidateData, positionData, questionsData, brandingData] = await Promise.all([
-          mockApi.getChecklist(),
-          mockApi.getInviteInfo(),
+        const [candidateData, positionData, questionsData, brandingData] = await Promise.all([
           mockApi.getCandidate(interviewData.candidateId),
           mockApi.getPosition(interviewData.positionId),
           mockApi.getQuestions(interviewData.positionId),
           mockApi.getBranding(),
         ]);
-        setChecklist(checklistData.map((item, index) => ({ ...item, icon: ICONS.checklist[index] })));
+        
+        // Static data for checklist and invite info
+        const checklistData = [
+          { text: 'Вы используете последнюю версию браузера Chrome или Edge' },
+          { text: 'Ваши колонки или наушники включены и работают' },
+          { text: 'Ваш микрофон включен и работает' },
+          { text: 'Вы в тихом помещении и готовы сконцентрироваться на собеседовании' },
+        ];
+        const inviteData = {
+          language: 'Русский',
+          questionsCount: 3,
+        };
+        
+        setChecklist(checklistData.map((item: any, index: number) => ({ ...item, icon: ICONS.checklist[index] })));
         setInviteInfo(inviteData);
         setCandidate(candidateData || null);
         setPosition(positionData || null);
@@ -141,7 +151,7 @@ const InterviewSession: React.FC = () => {
     if (questions && questions.length > 0) {
       await pushMessagesWithDelay([
         { from: 'ai', text: `Отлично, начинаем. Вопрос 1 из ${questions.length}.` },
-        { from: 'ai', text: questions[0].text }
+        { from: 'ai', text: questions[0].text || 'Вопрос не найден' }
       ]);
       setReadyForAnswer(true);
     } else {
@@ -164,7 +174,7 @@ const InterviewSession: React.FC = () => {
     setIsTranscribing(true);
 
     // Имитация более реалистичного ответа
-    const mockAnswer = `(Мок-ответ) Я считаю, что ${questions[currentQuestion].text.toLowerCase().replace('?', '...')}`;
+    const mockAnswer = `(Мок-ответ) Я считаю, что ${questions[currentQuestion]?.text?.toLowerCase().replace('?', '...') || 'вопрос не найден'}`;
     await sleep(1500); // Имитация обработки
     await pushMessagesWithDelay([{ from: 'user', text: mockAnswer }]);
     setIsTranscribing(false);
@@ -175,7 +185,7 @@ const InterviewSession: React.FC = () => {
       await pushMessagesWithDelay([
         { from: 'ai', text: 'Отлично, спасибо за ответ.' },
         { from: 'ai', text: `Следующий вопрос ${nextQuestionIndex + 1} из ${questions.length}:` },
-        { from: 'ai', text: questions[nextQuestionIndex].text }
+        { from: 'ai', text: questions[nextQuestionIndex]?.text || 'Вопрос не найден' }
       ]);
       setReadyForAnswer(true);
     } else {

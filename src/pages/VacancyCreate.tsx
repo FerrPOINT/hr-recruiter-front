@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, RefreshCw, GripVertical } from 'lucide-react';
 import { mockApi } from '../mocks/mockApi';
+import { PositionStatusEnum } from '../client/models/position-status-enum';
 import {
   DndContext,
   closestCenter,
@@ -23,6 +24,13 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+
+// Словарь для статуса вакансии (единственное число)
+const vacancyStatusMap: Record<PositionStatusEnum, { text: string; color: string }> = {
+  active: { text: 'Активная', color: 'text-green-600' },
+  paused: { text: 'Пауза', color: 'text-yellow-600' },
+  archived: { text: 'Архив', color: 'text-gray-600' },
+};
 
 interface Question {
   id: string;
@@ -135,6 +143,7 @@ const VacancyCreate: React.FC = () => {
   // Основные поля формы
   const [form, setForm] = useState({
     title: '',
+    status: 'active' as PositionStatusEnum,
     topics: [] as string[],
     language: 'Русский',
     showOtherLang: false,
@@ -173,6 +182,7 @@ const VacancyCreate: React.FC = () => {
     if (vacancy) {
       setForm({
         title: vacancy.title || '',
+        status: vacancy.status || 'active',
         topics: vacancy.topics || [],
         language: vacancy.language || 'Русский',
         showOtherLang: vacancy.showOtherLang || false,
@@ -313,10 +323,34 @@ const VacancyCreate: React.FC = () => {
     setIsLoading(true);
     
     try {
+      // Если это новая вакансия и нет вопросов, сначала генерируем их
+      if (!location.state?.vacancy && questions.length === 0 && form.description.trim()) {
+        setIsGenLoading(true);
+        try {
+          const result = await mockApi.generateQuestions({ 
+            description: form.description, 
+            questionsCount: Number(form.questionsCount) 
+          });
+          
+          const newQuestions: Question[] = result.map((q: any) => ({
+            id: Math.random().toString(36).substr(2, 9),
+            text: q.text,
+            evaluationCriteria: q.evaluationCriteria || 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
+          }));
+          
+          setQuestions(newQuestions);
+        } catch (error) {
+          console.error('Error generating questions:', error);
+        } finally {
+          setIsGenLoading(false);
+        }
+      }
+
       if (location.state?.vacancy) {
         // Обновление существующей вакансии
         await mockApi.updatePosition(location.state.vacancy.id, {
           title: form.title,
+          status: form.status,
           description: form.description,
           topics: form.topics,
           minScore: form.minScore,
@@ -335,8 +369,9 @@ const VacancyCreate: React.FC = () => {
         });
       } else {
         // Создание новой вакансии
-        await mockApi.createPosition({
+        const newVacancy = await mockApi.createPosition({
           title: form.title,
+          status: form.status,
           description: form.description,
           topics: form.topics,
           minScore: form.minScore,
@@ -353,6 +388,19 @@ const VacancyCreate: React.FC = () => {
           questionsCount: form.questionsCount,
           checkType: form.checkType,
         });
+
+        // Если есть вопросы, добавляем их к вакансии
+        if (questions.length > 0 && newVacancy.id) {
+          for (const question of questions) {
+            await mockApi.createPositionQuestion(newVacancy.id, {
+              text: question.text,
+              type: 'text',
+              order: questions.indexOf(question) + 1,
+              isRequired: true,
+              evaluationCriteria: question.evaluationCriteria
+            });
+          }
+        }
       }
       
       navigate('/vacancies');
@@ -440,6 +488,14 @@ const VacancyCreate: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Название</label>
                 <input name="title" value={form.title} onChange={handleChange} className="input-field text-base" placeholder="Go разработчик" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Статус</label>
+                <select name="status" value={form.status} onChange={handleChange} className="input-field text-base">
+                  {(['active', 'paused', 'archived'] as PositionStatusEnum[]).map((status) => (
+                    <option key={status} value={status}>{vacancyStatusMap[status].text}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Топики</label>

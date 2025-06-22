@@ -106,8 +106,7 @@ paths:
         - in: query
           name: status
           schema:
-            type: string
-            enum: [active, draft, archived]
+            $ref: '#/components/schemas/PositionStatusEnum'
           description: Фильтр по статусу
         - in: query
           name: search
@@ -219,8 +218,7 @@ paths:
               type: object
               properties:
                 status:
-                  type: string
-                  enum: [active, draft, archived]
+                  $ref: '#/components/schemas/PositionStatusEnum'
                   description: Новый статус вакансии
       responses:
         '200':
@@ -1086,96 +1084,30 @@ paths:
 
 components:
   schemas:
-    LoginRequest:
-      type: object
-      properties:
-        email:
-          type: string
-        password:
-          type: string
-      required: [email, password]
-    AuthResponse:
-      type: object
-      properties:
-        token:
-          type: string
-        user:
-          $ref: '#/components/schemas/User'
-    User:
+    # Базовые компоненты
+    BaseEntity:
       type: object
       properties:
         id:
           type: string
           format: uuid
-        name:
-          type: string
-        email:
-          type: string
-        role:
-          type: string
-          enum: [admin, recruiter, viewer]
-        avatarUrl:
-          type: string
-        language:
-          type: string
-      required: [id, name, email, role]
-    UserCreateRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        email:
-          type: string
-        role:
-          type: string
-          enum: [admin, recruiter, viewer]
-        password:
-          type: string
-      required: [name, email, role, password]
-    UserUpdateRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        avatarUrl:
-          type: string
-        language:
-          type: string
-    Position:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        company:
-          type: string
-        description:
-          type: string
-        status:
-          type: string
-          enum: [active, draft, archived]
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
-        publicLink:
+      required: [id, createdAt]
+    
+    BasePositionFields:
+      type: object
+      properties:
+        title:
           type: string
-        stats:
-          $ref: '#/components/schemas/PositionStats'
-        team:
-          type: array
-          items:
-            $ref: '#/components/schemas/User'
-        branding:
-          $ref: '#/components/schemas/Branding'
-        candidates:
-          type: array
-          items:
-            $ref: '#/components/schemas/Candidate'
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/PositionStatusEnum'
         topics:
           type: array
           items:
@@ -1185,44 +1117,181 @@ components:
           type: number
           format: float
           description: "Минимальный проходной балл"
-        avgScore:
-          type: number
-          format: float
-          description: "Средний балл по позиции"
-      required: [id, title, company, status, createdAt]
+        language:
+          type: string
+          description: "Язык собеседования"
+          example: "Русский"
+        showOtherLang:
+          type: boolean
+          description: "Показывать результаты на другом языке"
+        tags:
+          type: array
+          items:
+            type: string
+          description: "Теги для поиска"
+        answerTime:
+          type: integer
+          description: "Время на ответ в секундах"
+          example: 150
+        level:
+          $ref: '#/components/schemas/PositionLevelEnum'
+        saveAudio:
+          type: boolean
+          description: "Сохранять аудио"
+        saveVideo:
+          type: boolean
+          description: "Сохранять видео"
+        randomOrder:
+          type: boolean
+          description: "Случайный порядок вопросов"
+        questionType:
+          type: string
+          description: "Тип вопросов"
+          example: "В основном хард-скиллы"
+        questionsCount:
+          type: integer
+          description: "Количество вопросов"
+          example: 5
+        checkType:
+          type: string
+          description: "Тип проверки"
+    
+    BaseQuestionFields:
+      type: object
+      properties:
+        text:
+          type: string
+        type:
+          $ref: '#/components/schemas/QuestionTypeEnum'
+        order:
+          type: integer
+        isRequired:
+          type: boolean
+        evaluationCriteria:
+          type: string
+          description: "Критерии оценки ответа"
+    
+    BaseCandidateFields:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        status:
+          $ref: '#/components/schemas/CandidateStatusEnum'
+    
+    BaseUserFields:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          $ref: '#/components/schemas/RoleEnum'
+        avatarUrl:
+          type: string
+        language:
+          type: string
+        phone:
+          type: string
+    
+    # Основные схемы
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+      required: [email, password]
+    
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+    
+    User:
+      allOf:
+        - $ref: '#/components/schemas/BaseEntity'
+        - $ref: '#/components/schemas/BaseUserFields'
+      required: [id, name, email, role, createdAt]
+    
+    UserCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/BaseUserFields'
+        - type: object
+          properties:
+            password:
+              type: string
+          required: [name, email, role, password]
+    
+    UserUpdateRequest:
+      $ref: '#/components/schemas/BaseUserFields'
+    
+    Position:
+      allOf:
+        - $ref: '#/components/schemas/BaseEntity'
+        - $ref: '#/components/schemas/BasePositionFields'
+        - type: object
+          properties:
+            company:
+              type: string
+            publicLink:
+              type: string
+            stats:
+              $ref: '#/components/schemas/PositionStats'
+            team:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+            branding:
+              $ref: '#/components/schemas/Branding'
+            candidates:
+              type: array
+              items:
+                $ref: '#/components/schemas/Candidate'
+            avgScore:
+              type: number
+              format: float
+              description: "Средний балл по позиции"
+          required: [id, title, company, status, createdAt]
+    
     PositionCreateRequest:
-      type: object
-      properties:
-        title:
-          type: string
-        description:
-          type: string
-        status:
-          type: string
-          enum: [active, draft, archived]
-        team:
-          type: array
-          items:
-            type: string
-        brandingId:
-          type: string
-      required: [title, status]
+      allOf:
+        - $ref: '#/components/schemas/BasePositionFields'
+        - type: object
+          properties:
+            team:
+              type: array
+              items:
+                type: string
+            brandingId:
+              type: string
+          required: [title, status]
+    
     PositionUpdateRequest:
-      type: object
-      properties:
-        title:
-          type: string
-        description:
-          type: string
-        status:
-          type: string
-          enum: [active, draft, archived]
-        team:
-          type: array
-          items:
-            type: string
-        brandingId:
-          type: string
+      allOf:
+        - $ref: '#/components/schemas/BasePositionFields'
+        - type: object
+          properties:
+            team:
+              type: array
+              items:
+                type: string
+            brandingId:
+              type: string
+    
     PositionStats:
       type: object
       properties:
@@ -1240,79 +1309,38 @@ components:
         interviewsUnsuccessful:
           type: integer
           description: "Неуспешно завершенные"
+    
     Question:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        positionId:
-          type: string
-        text:
-          type: string
-        type:
-          type: string
-          enum: [text, audio, video, choice]
-        order:
-          type: integer
-        isRequired:
-          type: boolean
-      required: [id, positionId, text, type, order]
+      allOf:
+        - $ref: '#/components/schemas/BaseEntity'
+        - $ref: '#/components/schemas/BaseQuestionFields'
+        - type: object
+          properties:
+            positionId:
+              type: string
+          required: [id, positionId, text, type, order, createdAt]
+    
     QuestionCreateRequest:
-      type: object
-      properties:
-        text:
-          type: string
-        type:
-          type: string
-          enum: [text, audio, video, choice]
-        order:
-          type: integer
-        isRequired:
-          type: boolean
-      required: [text, type, order]
+      allOf:
+        - $ref: '#/components/schemas/BaseQuestionFields'
+        - type: object
+          required: [text, type, order]
+    
     QuestionUpdateRequest:
-      type: object
-      properties:
-        text:
-          type: string
-        type:
-          type: string
-          enum: [text, audio, video, choice]
-        order:
-          type: integer
-        isRequired:
-          type: boolean
+      $ref: '#/components/schemas/BaseQuestionFields'
+    
     Candidate:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        firstName:
-          type: string
-        lastName:
-          type: string
-        name:
-          type: string
-        email:
-          type: string
-        phone:
-          type: string
-        status:
-          type: string
-          enum: [new, in_progress, finished, rejected, hired]
-        interview:
-          $ref: '#/components/schemas/Interview'
-        positionId:
-          type: string
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
-      required: [id, firstName, lastName, status, positionId]
+      allOf:
+        - $ref: '#/components/schemas/BaseEntity'
+        - $ref: '#/components/schemas/BaseCandidateFields'
+        - type: object
+          properties:
+            interview:
+              $ref: '#/components/schemas/Interview'
+            positionId:
+              type: string
+          required: [id, firstName, lastName, status, positionId, createdAt]
+    
     CandidateCreateRequest:
       type: object
       properties:
@@ -1323,18 +1351,13 @@ components:
         phone:
           type: string
       required: [name]
+    
     CandidateUpdateRequest:
-      type: object
-      properties:
-        name:
-          type: string
-        email:
-          type: string
-        phone:
-          type: string
-        status:
-          type: string
-          enum: [new, in_progress, finished, rejected, hired]
+      allOf:
+        - $ref: '#/components/schemas/BaseCandidateFields'
+        - type: object
+          properties: {}
+    
     Interview:
       type: object
       properties:
@@ -1345,11 +1368,9 @@ components:
         positionId:
           type: string
         status:
-          type: string
-          enum: [not_started, in_progress, finished]
+          $ref: '#/components/schemas/InterviewStatusEnum'
         result:
-          type: string
-          enum: [successful, unsuccessful]
+          $ref: '#/components/schemas/InterviewResultEnum'
         startedAt:
           type: string
           format: date-time
@@ -1360,6 +1381,9 @@ components:
           type: string
         audioUrl:
           type: string
+        videoUrl:
+          type: string
+          description: "Ссылка на видео запись"
         aiScore:
           type: number
         answers:
@@ -1372,6 +1396,7 @@ components:
         - positionId
         - status
         - startedAt
+    
     InterviewAnswer:
       type: object
       properties:
@@ -1392,6 +1417,7 @@ components:
           type: string
           format: date-time
       required: [id, interviewId, questionId]
+    
     InterviewAnswerCreateRequest:
       type: object
       properties:
@@ -1404,23 +1430,24 @@ components:
         transcript:
           type: string
       required: [questionId]
+    
     Branding:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        companyName:
-          type: string
-        logoUrl:
-          type: string
-        primaryColor:
-          type: string
-        secondaryColor:
-          type: string
-        emailSignature:
-          type: string
-      required: [id, companyName]
+      allOf:
+        - $ref: '#/components/schemas/BaseEntity'
+        - type: object
+          properties:
+            companyName:
+              type: string
+            logoUrl:
+              type: string
+            primaryColor:
+              type: string
+            secondaryColor:
+              type: string
+            emailSignature:
+              type: string
+          required: [id, companyName, createdAt]
+    
     BrandingUpdateRequest:
       type: object
       properties:
@@ -1434,23 +1461,24 @@ components:
           type: string
         emailSignature:
           type: string
+    
     Tariff:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        features:
-          type: array
-          items:
-            type: string
-        price:
-          type: number
-        isActive:
-          type: boolean
-      required: [id, name, price]
+      allOf:
+        - $ref: '#/components/schemas/BaseEntity'
+        - type: object
+          properties:
+            name:
+              type: string
+            features:
+              type: array
+              items:
+                type: string
+            price:
+              type: number
+            isActive:
+              type: boolean
+          required: [id, name, price, createdAt]
+    
     TariffCreateRequest:
       type: object
       properties:
@@ -1465,6 +1493,7 @@ components:
         isActive:
           type: boolean
       required: [name, price]
+    
     TariffUpdateRequest:
       type: object
       properties:
@@ -1478,12 +1507,62 @@ components:
           type: number
         isActive:
           type: boolean
+    
+    # Enums
     PositionStatusEnum:
       type: string
       enum:
         - active
-        - draft
+        - paused
         - archived
+    
+    CandidateStatusEnum:
+      type: string
+      enum:
+        - new
+        - in_progress
+        - finished
+        - rejected
+        - hired
+    
+    InterviewStatusEnum:
+      type: string
+      enum:
+        - not_started
+        - in_progress
+        - finished
+    
+    InterviewResultEnum:
+      type: string
+      enum:
+        - successful
+        - unsuccessful
+    
+    QuestionTypeEnum:
+      type: string
+      enum:
+        - text
+        - audio
+        - video
+        - choice
+    
+    PositionLevelEnum:
+      type: string
+      enum:
+        - junior
+        - middle
+        - senior
+        - lead
+      description: "Уровень позиции"
+    
+    RoleEnum:
+      type: string
+      enum:
+        - admin
+        - recruiter
+        - viewer
+    
+    # Stats
     CandidateStats:
       type: object
       properties:
@@ -1495,6 +1574,7 @@ components:
           type: integer
         hired:
           type: integer
+    
     InterviewStats:
       type: object
       properties:
@@ -1504,12 +1584,7 @@ components:
           type: integer
         unsuccessful:
           type: integer
-    RoleEnum:
-      type: string
-      enum:
-        - admin
-        - recruiter
-        - viewer
+    
     MonthlyReport:
       type: object
       properties:

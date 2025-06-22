@@ -54,14 +54,17 @@ const Layout: React.FC = () => {
       try {
         let user, tariff;
         if (useMock) {
-          user = await mockApi.getUserInfo();
+          user = await mockApi.getAccount();
           tariff = await mockApi.getTariffInfo();
         } else {
           // Для real API пока используем mock данные для UI
-          user = await mockApi.getUserInfo();
+          user = await mockApi.getAccount();
           tariff = await mockApi.getTariffInfo();
         }
-        setUserInfo(user);
+        setUserInfo({
+          email: user.email || '',
+          language: user.language || 'Русский',
+        });
         setTariffInfo(tariff);
       } catch (error: any) {
         console.error('Error loading user data:', error);

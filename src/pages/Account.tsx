@@ -28,8 +28,17 @@ const Account: React.FC = () => {
       try {
         // Всегда используем mock API для демонстрации
         const data = await mockApi.getAccount?.();
-        setUser(data);
-        setEditData(data);
+        const userData: UserData = {
+          id: data.id,
+          name: data.name || '',
+          email: data.email || '',
+          role: data.role || 'recruiter',
+          avatarUrl: data.avatarUrl,
+          language: data.language || 'Русский',
+          phone: data.phone,
+        };
+        setUser(userData);
+        setEditData(userData);
       } catch (error: any) {
         console.error('Error loading account:', error);
         const errorMessage = error.response?.data?.message || 'Ошибка загрузки профиля';

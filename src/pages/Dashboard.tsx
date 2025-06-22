@@ -99,11 +99,24 @@ const Dashboard: React.FC = () => {
         let statsData, interviewsData;
         
         if (useMock) {
-          statsData = await mockApi.getStats();
+          const rawStats = await mockApi.getStats();
+          // Convert the stats to the expected format
+          statsData = [
+            { name: 'Активные вакансии', value: rawStats.totalCandidates || 0, icon: 'briefcase', href: '/vacancies', change: `+${Math.floor(Math.random() * 3)}`, changeType: 'positive' },
+            { name: 'Всего кандидатов', value: rawStats.totalCandidates || 0, icon: 'users', href: '/interviews', change: `+${Math.floor(Math.random() * 10)}`, changeType: 'positive' },
+            { name: 'Успешных интервью', value: rawStats.successfulInterviews || 0, icon: 'check', href: '/reports', change: `+${Math.floor(Math.random() * 5)}`, changeType: 'positive' },
+            { name: 'Средний балл', value: rawStats.successRate ? `${rawStats.successRate}%` : '7.8', icon: 'trending-up', href: '/reports', change: '+0.1', changeType: 'positive' },
+          ];
           interviewsData = await mockApi.getRecentInterviews();
         } else {
           // TODO: подключить реальный API-клиент
-          statsData = await mockApi.getStats();
+          const rawStats = await mockApi.getStats();
+          statsData = [
+            { name: 'Активные вакансии', value: rawStats.totalCandidates || 0, icon: 'briefcase', href: '/vacancies', change: `+${Math.floor(Math.random() * 3)}`, changeType: 'positive' },
+            { name: 'Всего кандидатов', value: rawStats.totalCandidates || 0, icon: 'users', href: '/interviews', change: `+${Math.floor(Math.random() * 10)}`, changeType: 'positive' },
+            { name: 'Успешных интервью', value: rawStats.successfulInterviews || 0, icon: 'check', href: '/reports', change: `+${Math.floor(Math.random() * 5)}`, changeType: 'positive' },
+            { name: 'Средний балл', value: rawStats.successRate ? `${rawStats.successRate}%` : '7.8', icon: 'trending-up', href: '/reports', change: '+0.1', changeType: 'positive' },
+          ];
           interviewsData = await mockApi.getRecentInterviews();
         }
         

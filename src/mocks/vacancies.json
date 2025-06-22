@@ -36,7 +36,7 @@
     "minScore": 6.0,
     "avgScore": 7.2,
     "createdAt": "2024-06-01T09:00:00Z",
-    "status": "active",
+    "status": "paused",
     "description": "Наша команда ищет Data Scientist для анализа данных, построения и валидации ML-моделей. Вы будете работать с большими наборами данных для извлечения ценных инсайтов и улучшения наших продуктов.",
     "requirements": "Опыт работы с Python и библиотеками для анализа данных (Pandas, NumPy, Scikit-learn). Знание классических алгоритмов машинного обучения. Опыт работы с фреймворками глубокого обучения (TensorFlow, PyTorch). Уверенное владение SQL.",
     "publicLink": "https://example.com/public-interview/data-scientist",
@@ -51,7 +51,7 @@
     "minScore": 6.8,
     "avgScore": 7.5,
     "createdAt": "2024-06-10T15:00:00Z",
-    "status": "active",
+    "status": "archived",
     "description": "Ищем инженера по автоматизации тестирования для обеспечения качества наших веб-приложений. Основные задачи: разработка и поддержка автотестов (UI и API), интеграция тестов в CI/CD пайплайны.",
     "requirements": "Опыт автоматизации тестирования на Python/Java/JS. Опыт работы с Selenium WebDriver или аналогами. Опыт тестирования REST API. Знание фреймворков для тестирования (Pytest, TestNG, Jest). Понимание процессов CI/CD.",
     "publicLink": "https://example.com/public-interview/qa-automation",
@@ -73,5 +73,35 @@
     "emailConfirm": true,
     "phoneRequired": true,
     "answerTime": 240
+  },
+  {
+    "id": "p6",
+    "title": "DevOps Engineer",
+    "topics": ["DevOps", "AWS", "Terraform", "Ansible", "Jenkins", "Docker", "Kubernetes"],
+    "minScore": 7.0,
+    "avgScore": 7.9,
+    "createdAt": "2024-07-01T14:00:00Z",
+    "status": "paused",
+    "description": "Ищем DevOps инженера для автоматизации процессов развертывания и мониторинга нашей инфраструктуры. Работа с облачными платформами и инструментами автоматизации.",
+    "requirements": "Опыт работы с AWS или другими облачными платформами. Знание Terraform, Ansible. Опыт настройки CI/CD пайплайнов. Уверенное владение Docker и Kubernetes. Опыт мониторинга и логирования.",
+    "publicLink": "https://example.com/public-interview/devops-engineer",
+    "emailConfirm": true,
+    "phoneRequired": true,
+    "answerTime": 150
+  },
+  {
+    "id": "p7",
+    "title": "UX/UI Designer",
+    "topics": ["UX Design", "UI Design", "Figma", "Prototyping", "User Research", "Design Systems"],
+    "minScore": 6.5,
+    "avgScore": 7.3,
+    "createdAt": "2024-07-15T10:00:00Z",
+    "status": "archived",
+    "description": "Приглашаем UX/UI дизайнера для создания интуитивных и красивых интерфейсов. Работа над дизайн-системой и проведение пользовательских исследований.",
+    "requirements": "Опыт работы UX/UI дизайнером от 2 лет. Уверенное владение Figma. Опыт проведения пользовательских исследований. Понимание принципов дизайн-систем. Портфолио с качественными проектами.",
+    "publicLink": "https://example.com/public-interview/ux-ui-designer",
+    "emailConfirm": false,
+    "phoneRequired": false,
+    "answerTime": 120
   }
 ] 

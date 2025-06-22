@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2, Copy, CheckCircle, Clock, AlertCircle, Archive } from 'lucide-react';
+import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2, Copy, CheckCircle, Clock, AlertCircle, Archive, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 // import vacanciesData from '../mocks/vacancies.json';
 import { mockApi } from '../mocks/mockApi';
 import type { Position } from '../client/models/position';
 import type { Interview } from '../client/models/interview';
 import type { Candidate } from '../client/models/candidate';
+import { PositionStatusEnum } from '../client/models/position-status-enum';
 
 const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
@@ -30,10 +31,27 @@ const interviewStatusMap = {
   unsuccessful: { text: 'Неуспешно', icon: <AlertCircle className="h-4 w-4 text-red-500" />, color: 'bg-red-500' },
 };
 
+// Словарь для статусов вакансий
+const positionStatusMap: Record<PositionStatusEnum, { text: string; color: string }> = {
+  active: { text: 'Активные', color: 'text-green-600' },
+  paused: { text: 'На паузе', color: 'text-yellow-600' },
+  archived: { text: 'Архив', color: 'text-gray-600' },
+};
+
+// Словарь для статуса одной вакансии (единственное число)
+const vacancyStatusMap: Record<PositionStatusEnum, { text: string; color: string }> = {
+  active: { text: 'Активная', color: 'text-green-600' },
+  paused: { text: 'Пауза', color: 'text-yellow-600' },
+  archived: { text: 'Архив', color: 'text-gray-600' },
+};
+
+type StatusFilterType = PositionStatusEnum | '';
 const VacancyList: React.FC = () => {
   // Состояния фильтрации и выбранной вакансии
   const [searchTerm, setSearchTerm] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilterType>(''); // '' = все
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showVacancyStatusDropdown, setShowVacancyStatusDropdown] = useState(false);
   const [tab, setTab] = useState<'all' | 'my'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editMode, setEditMode] = useState(false);
@@ -58,12 +76,13 @@ const VacancyList: React.FC = () => {
     setLoading(true);
     (async () => {
       let data;
-      const status = showArchived ? 'archived' : 'active';
+      const params: any = { search: searchTerm };
+      if (statusFilter) params.status = statusFilter;
       if (useMock) {
-        data = await mockApi.getPositions({ status, search: searchTerm });
+        data = await mockApi.getPositions(params);
       } else {
         // TODO: подключить реальный API-клиент
-        data = await mockApi.getPositions({ status, search: searchTerm });
+        data = await mockApi.getPositions(params);
       }
       setVacancies(data.items);
       // Если перешли по ссылке с dashboard, выбираем нужную вакансию
@@ -76,20 +95,23 @@ const VacancyList: React.FC = () => {
       setLoading(false);
     })();
     // eslint-disable-next-line
-  }, [searchTerm, showArchived]);
+  }, [searchTerm, statusFilter]);
 
   useEffect(() => {
     if (selectedId) {
       setInterviewsLoading(true);
       (async () => {
-        const [interviewsData, candidatesData] = await Promise.all([
+        const [interviewsData] = await Promise.all([
           mockApi.getPositionInterviews(selectedId),
-          mockApi.getPositions({ status: 'active' }).then(res =>
-             res.items.find(p => p.id === selectedId)?.candidates || []
-          )
         ]);
         setInterviews(interviewsData);
-        setCandidates(candidatesData as Candidate[]);
+        
+        // Get candidates from interviews
+        const candidateIds = Array.from(new Set(interviewsData.map(interview => interview.candidateId)));
+        const candidatesData = await Promise.all(
+          candidateIds.map(id => mockApi.getCandidate(id))
+        );
+        setCandidates(candidatesData.filter(Boolean) as Candidate[]);
         setInterviewsLoading(false);
       })();
     }
@@ -129,8 +151,7 @@ const VacancyList: React.FC = () => {
         await mockApi.updatePosition(id, { status: 'archived' });
         toast.success('Вакансия архивирована');
         // Refetch vacancies
-        const status = showArchived ? 'archived' : 'active';
-        const data = await mockApi.getPositions({ status, search: searchTerm });
+        const data = await mockApi.getPositions({ status: statusFilter, search: searchTerm });
         setVacancies(data.items);
         if (selectedId === id) {
           setSelectedId(data.items.length > 0 ? data.items[0].id : null);
@@ -177,6 +198,50 @@ const VacancyList: React.FC = () => {
               Мои <span className="ml-1">0</span>
             </button>
           </div>
+          {/* Фильтр по статусу */}
+          <div className="px-4 py-2">
+            <div className="relative">
+              <button
+                onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                className="w-full flex items-center justify-between px-3 py-2 text-sm border border-gray-200 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+              >
+                <span className={statusFilter ? positionStatusMap[statusFilter as PositionStatusEnum]?.color : 'text-gray-600'}>
+                  {statusFilter ? positionStatusMap[statusFilter as PositionStatusEnum]?.text : 'Все статусы'}
+                </span>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showStatusDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <button
+                    key="all"
+                    onClick={() => {
+                      setStatusFilter('');
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors ${
+                      statusFilter === '' ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
+                    } rounded-t-lg`}
+                  >
+                    Все статусы
+                  </button>
+                  {(['active', 'paused', 'archived'] as PositionStatusEnum[]).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => {
+                        setStatusFilter(status);
+                        setShowStatusDropdown(false);
+                      }}
+                      className={`w-full px-3 py-2 text-sm text-left hover:bg-gray-50 transition-colors ${
+                        statusFilter === status ? 'bg-primary-50 text-primary-700' : 'text-gray-700'
+                      } ${status === 'archived' ? 'rounded-b-lg' : ''}`}
+                    >
+                      {positionStatusMap[status]?.text}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           {/* Поиск */}
           <div className="px-4 py-2">
             <div className="relative">
@@ -189,18 +254,6 @@ const VacancyList: React.FC = () => {
                 className="pl-10 pr-3 py-2 w-full rounded-lg border border-gray-200 bg-gray-50 text-sm focus:outline-none focus:ring-2 focus:ring-primary-100 focus:border-primary-300 placeholder-gray-400 transition"
               />
             </div>
-          </div>
-          {/* Архивный переключатель */}
-          <div className="px-4 py-2">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-600 hover:text-gray-800">
-              <input
-                type="checkbox"
-                checked={showArchived}
-                onChange={e => setShowArchived(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              Показать архив
-            </label>
           </div>
           {/* Список вакансий */}
           <div className="flex-1 overflow-y-auto">
@@ -266,12 +319,52 @@ const VacancyList: React.FC = () => {
                 <div className="flex gap-3 items-center">
                   <button className="btn-primary min-w-[160px] h-11 text-base flex items-center justify-center" onClick={handleCreateInterview}>Создать интервью</button>
                   <button className="btn-secondary min-w-[160px] h-11 text-base flex items-center justify-center" onClick={handleEdit}>Редактировать</button>
-                  <button 
-                    className="btn-secondary min-w-[160px] h-11 text-base flex items-center justify-center gap-2" 
-                    onClick={() => selectedVacancy && handleArchive(selectedVacancy.id)}>
-                    <Archive className="h-4 w-4" />
-                    Архивировать
-                  </button>
+                  {/* Смена статуса */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowVacancyStatusDropdown(!showVacancyStatusDropdown)}
+                      className={`min-w-[160px] h-11 text-base flex items-center justify-between px-4 rounded-lg border transition-colors ${
+                        selectedVacancy.status === 'active' 
+                          ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100' 
+                          : selectedVacancy.status === 'paused'
+                          ? 'bg-yellow-50 border-yellow-200 text-yellow-700 hover:bg-yellow-100'
+                          : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                      }`}
+                    >
+                      <span>{vacancyStatusMap[selectedVacancy.status as PositionStatusEnum]?.text || 'Неизвестный статус'}</span>
+                      <ChevronDown className={`h-4 w-4 transition-transform ${showVacancyStatusDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showVacancyStatusDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                        {(['active', 'paused', 'archived'] as PositionStatusEnum[]).map((status) => (
+                          <button
+                            key={status}
+                            onClick={async () => {
+                              if (status !== selectedVacancy.status) {
+                                try {
+                                  await mockApi.updatePosition(selectedVacancy.id, { status });
+                                  toast.success('Статус обновлен');
+                                  // Обновить список вакансий
+                                  const params: any = { search: searchTerm };
+                                  if (statusFilter) params.status = statusFilter;
+                                  const data = await mockApi.getPositions(params);
+                                  setVacancies(data.items);
+                                } catch (error) {
+                                  toast.error('Не удалось обновить статус');
+                                }
+                              }
+                              setShowVacancyStatusDropdown(false);
+                            }}
+                            className={`w-full px-4 py-2 text-sm text-left hover:bg-gray-50 transition-colors ${
+                              status === 'active' ? 'text-green-700' : status === 'paused' ? 'text-yellow-700' : 'text-red-700'
+                            } ${status === 'active' ? 'rounded-t-lg' : ''} ${status === 'archived' ? 'rounded-b-lg' : ''}`}
+                          >
+                            {vacancyStatusMap[status].text}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               {/* Обзор */}
