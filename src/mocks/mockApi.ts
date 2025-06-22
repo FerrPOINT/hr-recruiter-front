@@ -1,17 +1,10 @@
-import {
-  Branding,
-  Candidate,
-  Interview,
-  Position,
-  PositionStats,
-  Question,
-  User,
-  CandidateStatusEnum,
-  InterviewResultEnum,
-  InterviewStatusEnum,
-  QuestionTypeEnum,
-  UserRoleEnum,
-} from '../client';
+import { Branding } from '../client/models/branding';
+import { Candidate, StatusEnum as CandidateStatusEnum } from '../client/models/candidate';
+import { Interview, StatusEnum as InterviewStatusEnum, ResultEnum as InterviewResultEnum } from '../client/models/interview';
+import { Position } from '../client/models/position';
+import { PositionStats } from '../client/models/position-stats';
+import { Question, TypeEnum as QuestionTypeEnum } from '../client/models/question';
+import { User, RoleEnum as UserRoleEnum } from '../client/models/user';
 import type { RoleEnum } from '../client/models/user';
 import vacanciesData from './vacancies.json';
 import { CheckCircle, XCircle, Clock, Briefcase, Users, TrendingUp } from 'lucide-react';

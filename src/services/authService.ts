@@ -1,5 +1,6 @@
 import { createApiClient } from '../client/apiClient';
-import { LoginRequest, AuthResponse } from '../client/models';
+import { LoginRequest } from '../client/models/login-request';
+import { AuthResponse } from '../client/models/auth-response';
 import { mockApi } from '../mocks/mockApi';
 
 class AuthService {
