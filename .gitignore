@@ -1,5 +1,4 @@
 node_modules
-src/client/
 
 # Исключаем только .idea, но оставляем runConfigurations
 .idea/

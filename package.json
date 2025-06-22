@@ -32,7 +32,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "generate:api": "openapi-generator-cli generate -i api/openapi.yaml -g typescript-axios -o src/client --additional-properties=supportsES6=true,withSeparateModelsAndApi=true,apiPackage=apis,modelPackage=models,enumPropertyNaming=original,modelPropertyNaming=original,typescriptThreePlus=true,withoutPrefixEnums=true --ignore-file-override .openapi-generator-ignore"
+    "generate:api": "openapi-generator-cli generate -i api/openapi.yaml -g typescript-axios -o src/client --additional-properties=supportsES6=true,withSeparateModelsAndApi=true,apiPackage=apis,modelPackage=models,enumPropertyNaming=original,modelPropertyNaming=original,typescriptThreePlus=true,withoutPrefixEnums=true --ignore-file-override .openapi-generator-ignore && node scripts/generate-models-index.js"
   },
   "eslintConfig": {
     "extends": [
