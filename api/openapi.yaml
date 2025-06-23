@@ -1240,32 +1240,91 @@ components:
       $ref: '#/components/schemas/BaseUserFields'
     
     Position:
-      allOf:
-        - $ref: '#/components/schemas/BaseEntity'
-        - $ref: '#/components/schemas/BasePositionFields'
-        - type: object
-          properties:
-            company:
-              type: string
-            publicLink:
-              type: string
-            stats:
-              $ref: '#/components/schemas/PositionStats'
-            team:
-              type: array
-              items:
-                $ref: '#/components/schemas/User'
-            branding:
-              $ref: '#/components/schemas/Branding'
-            candidates:
-              type: array
-              items:
-                $ref: '#/components/schemas/Candidate'
-            avgScore:
-              type: number
-              format: float
-              description: "Средний балл по позиции"
-          required: [id, title, company, status, createdAt]
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/PositionStatusEnum'
+        topics:
+          type: array
+          items:
+            type: string
+          description: "Ключевые темы/теги позиции"
+        minScore:
+          type: number
+          format: float
+          description: "Минимальный проходной балл"
+        language:
+          type: string
+          description: "Язык собеседования"
+          example: "Русский"
+        showOtherLang:
+          type: boolean
+          description: "Показывать результаты на другом языке"
+        tags:
+          type: array
+          items:
+            type: string
+          description: "Теги для поиска"
+        answerTime:
+          type: integer
+          description: "Время на ответ в секундах"
+          example: 150
+        level:
+          $ref: '#/components/schemas/PositionLevelEnum'
+        saveAudio:
+          type: boolean
+          description: "Сохранять аудио"
+        saveVideo:
+          type: boolean
+          description: "Сохранять видео"
+        randomOrder:
+          type: boolean
+          description: "Случайный порядок вопросов"
+        questionType:
+          type: string
+          description: "Тип вопросов"
+          example: "В основном хард-скиллы"
+        questionsCount:
+          type: integer
+          description: "Количество вопросов"
+          example: 5
+        checkType:
+          type: string
+          description: "Тип проверки"
+        company:
+          type: string
+        publicLink:
+          type: string
+        stats:
+          $ref: '#/components/schemas/PositionStats'
+        team:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        branding:
+          $ref: '#/components/schemas/Branding'
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candidate'
+        avgScore:
+          type: number
+          format: float
+          description: "Средний балл по позиции"
+      required: [id, title, company, status, createdAt]
     
     PositionCreateRequest:
       allOf:
@@ -1432,21 +1491,28 @@ components:
       required: [questionId]
     
     Branding:
-      allOf:
-        - $ref: '#/components/schemas/BaseEntity'
-        - type: object
-          properties:
-            companyName:
-              type: string
-            logoUrl:
-              type: string
-            primaryColor:
-              type: string
-            secondaryColor:
-              type: string
-            emailSignature:
-              type: string
-          required: [id, companyName, createdAt]
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        companyName:
+          type: string
+        logoUrl:
+          type: string
+        primaryColor:
+          type: string
+        secondaryColor:
+          type: string
+        emailSignature:
+          type: string
+      required: [id, companyName, createdAt]
     
     BrandingUpdateRequest:
       type: object
