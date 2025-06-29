@@ -1,34 +1,64 @@
-import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, MoreVertical, Users, FileText, BarChart2, Globe, Mail, Link2, Copy, CheckCircle, Clock, AlertCircle, Archive, ChevronDown } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Search, MoreVertical, Link2, Copy, CheckCircle, Clock, AlertCircle, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
-// import vacanciesData from '../mocks/vacancies.json';
-import { mockApi } from '../mocks/mockApi';
+import { apiService } from '../services/apiService';
+import { authService } from '../services/authService';
 import type { Position } from '../client/models/position';
 import type { Interview } from '../client/models/interview';
 import type { Candidate } from '../client/models/candidate';
+import type { Question } from '../client/models/question';
 import { PositionStatusEnum } from '../client/models/position-status-enum';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
 // Функция для форматирования дат
 const formatDate = (dateString?: string) => {
-  if (!dateString) return '-';
-  return new Date(dateString).toLocaleString('ru-RU', {
+  if (!dateString) return '';
+  return new Date(dateString).toLocaleDateString('ru-RU', {
     day: '2-digit',
     month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    year: 'numeric'
   });
+};
+
+// Функция для обрезки названия вакансии до 20 символов (более строгое ограничение)
+const truncateTitle = (title: string | undefined, maxLength: number = 20) => {
+  if (!title) return '';
+  const trimmedTitle = title.trim();
+  const result = trimmedTitle.length > maxLength ? trimmedTitle.substring(0, maxLength) + '...' : trimmedTitle;
+  console.log(`truncateTitle: "${title}" -> "${result}" (${trimmedTitle.length}/${maxLength})`);
+  return result;
+};
+
+// Функция для обрезки топиков до 35 символов (более строгое ограничение)
+const truncateTopics = (topics: string[] | undefined, maxLength: number = 35) => {
+  if (!topics || topics.length === 0) return '';
+  const topicsString = topics.join(', ').trim();
+  const result = topicsString.length > maxLength ? topicsString.substring(0, maxLength) + '...' : topicsString;
+  console.log(`truncateTopics: "${topicsString}" -> "${result}" (${topicsString.length}/${maxLength})`);
+  return result;
+};
+
+// Функции для обрезки в правой панели (детали вакансии) - более длинные ограничения
+const truncateTitleDetails = (title: string | undefined, maxLength: number = 25) => {
+  if (!title) return '';
+  const trimmedTitle = title.trim();
+  return trimmedTitle.length > maxLength ? trimmedTitle.substring(0, maxLength) + '...' : trimmedTitle;
+};
+
+const truncateTopicsDetails = (topics: string[] | undefined, maxLength: number = 60) => {
+  if (!topics || topics.length === 0) return '';
+  const topicsString = topics.join(', ').trim();
+  return topicsString.length > maxLength ? topicsString.substring(0, maxLength) + '...' : topicsString;
 };
 
 // Словарь для статусов
 const interviewStatusMap = {
   not_started: { text: 'Не начато', icon: <AlertCircle className="h-4 w-4 text-gray-400" />, color: 'bg-gray-400' },
   in_progress: { text: 'В процессе', icon: <Clock className="h-4 w-4 text-yellow-500" />, color: 'bg-yellow-400' },
+  finished: { text: 'Завершено', icon: <CheckCircle className="h-4 w-4 text-green-500" />, color: 'bg-green-500' },
   successful: { text: 'Успешно', icon: <CheckCircle className="h-4 w-4 text-green-500" />, color: 'bg-green-500' },
   unsuccessful: { text: 'Неуспешно', icon: <AlertCircle className="h-4 w-4 text-red-500" />, color: 'bg-red-500' },
+  evaluating: { text: 'На оценке', icon: <Clock className="h-4 w-4 text-yellow-500" />, color: 'bg-yellow-400' },
 };
 
 // Словарь для статусов вакансий
@@ -46,7 +76,18 @@ const vacancyStatusMap: Record<PositionStatusEnum, { text: string; color: string
 };
 
 type StatusFilterType = PositionStatusEnum | '';
+
 const VacancyList: React.FC = () => {
+  // Проверяем аутентификацию
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    if (!authService.isAuthenticated()) {
+      navigate('/login');
+      return;
+    }
+  }, [navigate]);
+
   // Состояния фильтрации и выбранной вакансии
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilterType>(''); // '' = все
@@ -54,82 +95,193 @@ const VacancyList: React.FC = () => {
   const [showVacancyStatusDropdown, setShowVacancyStatusDropdown] = useState(false);
   const [tab, setTab] = useState<'all' | 'my'>('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [editMode, setEditMode] = useState(false);
   const [vacancies, setVacancies] = useState<Position[]>([]);
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [interviewsLoading, setInterviewsLoading] = useState(false);
-  const navigate = useNavigate();
-  const location = useLocation();
+  const [questionsLoading, setQuestionsLoading] = useState(false);
 
   // Вкладки для деталей вакансии
   const vacancyTabs = [
     { key: 'candidates', label: 'Кандидаты' },
     { key: 'description', label: 'Текст вакансии' },
-    { key: 'comments', label: 'Комментарии' },
     { key: 'questions', label: 'Вопросы собеседования' },
   ];
   const [vacancyTab, setVacancyTab] = useState('candidates');
 
+  // Логируем изменения selectedId
   useEffect(() => {
-    setLoading(true);
-    (async () => {
-      let data;
-      const params: any = { search: searchTerm };
-      if (statusFilter) params.status = statusFilter;
-      if (useMock) {
-        data = await mockApi.getPositions(params);
-      } else {
-        // TODO: подключить реальный API-клиент
-        data = await mockApi.getPositions(params);
-      }
-      setVacancies(data.items);
-      // Если перешли по ссылке с dashboard, выбираем нужную вакансию
-      const locationState = location.state as { positionId?: string };
-      if (locationState?.positionId) {
-        setSelectedId(locationState.positionId);
-      } else if (!selectedId && data.items.length > 0) {
-        setSelectedId(data.items[0].id);
-      }
-      setLoading(false);
-    })();
-    // eslint-disable-next-line
-  }, [searchTerm, statusFilter]);
-
-  useEffect(() => {
-    if (selectedId) {
-      setInterviewsLoading(true);
-      (async () => {
-        const [interviewsData] = await Promise.all([
-          mockApi.getPositionInterviews(selectedId),
-        ]);
-        setInterviews(interviewsData);
-        
-        // Get candidates from interviews
-        const candidateIds = Array.from(new Set(interviewsData.map(interview => interview.candidateId)));
-        const candidatesData = await Promise.all(
-          candidateIds.map(id => mockApi.getCandidate(id))
-        );
-        setCandidates(candidatesData.filter(Boolean) as Candidate[]);
-        setInterviewsLoading(false);
-      })();
-    }
+    console.log('selectedId changed to:', selectedId);
   }, [selectedId]);
 
-  const filteredVacancies = vacancies;
-  const selectedVacancy = filteredVacancies.find(v => v.id === selectedId) || filteredVacancies[0];
+  // Загрузка данных при изменении фильтров
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const params: any = { search: searchTerm };
+        if (statusFilter) params.status = statusFilter;
+        
+        console.log('Fetching positions with params:', params);
+        const data = await apiService.getPositions(params);
+        console.log('Positions data received:', data);
+        
+        // Проверяем структуру данных
+        if (!data || !Array.isArray(data.items)) {
+          console.error('Invalid positions data structure:', data);
+          setVacancies([]);
+          toast.error('Неверный формат данных вакансий');
+          return;
+        }
+        
+        // Загружаем статистику для каждой позиции
+        const positionsWithStats = await Promise.all(
+          data.items.map(async (position) => {
+            try {
+              const stats = await apiService.getPositionStats(position.id);
+              return { ...position, stats };
+            } catch (error) {
+              console.warn(`Failed to load stats for position ${position.id}:`, error);
+              return position;
+            }
+          })
+        );
+        
+        console.log('Positions with stats:', positionsWithStats);
+        setVacancies(positionsWithStats);
+        
+        // Если нет выбранной вакансии, выбираем первую
+        if (!selectedId && positionsWithStats.length > 0) {
+          setSelectedId(positionsWithStats[0].id.toString());
+        }
+      } catch (error) {
+        console.error('Error fetching positions:', error);
+        toast.error('Не удалось загрузить вакансии');
+        setVacancies([]);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Статистика по собеседованиям
-  const interviewStats = interviews.reduce(
-    (acc, interview) => {
-      if (interview.status === 'finished') acc.finished++;
-      else if (interview.status === 'in_progress') acc.inProgress++;
-      else if (interview.status === 'not_started') acc.notStarted++;
-      return acc;
-    },
-    { finished: 0, inProgress: 0, notStarted: 0 }
-  );
+    // Добавляем debounce для предотвращения частых вызовов
+    const timeoutId = setTimeout(fetchData, 300);
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, selectedId]); // Добавляем selectedId в зависимости
+
+  // Загрузка детальных данных для выбранной вакансии
+  useEffect(() => {
+    if (!selectedId) return;
+
+    const fetchDetailedData = async () => {
+      setInterviewsLoading(true);
+      setQuestionsLoading(true);
+      
+      try {
+        // Получаем кандидатов из существующих собеседований
+        const selectedVacancyInterviews = interviews.filter(interview => interview.positionId === parseInt(selectedId));
+        const candidateIds = Array.from(new Set(selectedVacancyInterviews.map(interview => interview.candidateId)));
+        
+        if (candidateIds.length > 0) {
+          const candidatesData = await Promise.all(
+            candidateIds.map(id => apiService.getCandidate(id).catch(() => null))
+          );
+          const validCandidates = candidatesData.filter(Boolean) as Candidate[];
+          setCandidates(validCandidates);
+        } else {
+          setCandidates([]);
+        }
+      } catch (error) {
+        console.error('Error fetching candidates:', error);
+        toast.error('Не удалось загрузить кандидатов');
+        setCandidates([]);
+      } finally {
+        setInterviewsLoading(false);
+      }
+
+      try {
+        // Загружаем вопросы для выбранной вакансии
+        const questionsData = await apiService.getQuestions(parseInt(selectedId));
+        setQuestions(questionsData.questions);
+      } catch (error) {
+        console.error('Error fetching questions:', error);
+        setQuestions([]);
+      } finally {
+        setQuestionsLoading(false);
+      }
+    };
+
+    fetchDetailedData();
+  }, [selectedId, interviews]); // Добавляем interviews в зависимости
+
+  // Загрузка всех интервью для всех вакансий (для статистики в левой панели)
+  useEffect(() => {
+    const fetchAllInterviews = async () => {
+      try {
+        // Загружаем все интервью для всех вакансий
+        const allInterviews: Interview[] = [];
+        
+        for (const vacancy of vacancies) {
+          try {
+            const vacancyInterviews = await apiService.getPositionInterviews(vacancy.id);
+            allInterviews.push(...vacancyInterviews);
+          } catch (error) {
+            console.warn(`Failed to load interviews for vacancy ${vacancy.id}:`, error);
+          }
+        }
+        
+        console.log('Loaded all interviews for statistics:', allInterviews);
+        setInterviews(allInterviews);
+      } catch (error) {
+        console.error('Error fetching all interviews:', error);
+      }
+    };
+
+    if (vacancies.length > 0) {
+      fetchAllInterviews();
+    }
+  }, [vacancies]);
+
+  const filteredVacancies = useMemo(() => {
+    return vacancies || [];
+  }, [vacancies]);
+  
+  const selectedVacancy = filteredVacancies.find(v => v.id.toString() === selectedId) || filteredVacancies[0];
+
+  // Функция для расчета статистики по РЕЗУЛЬТАТАМ (для списка вакансий слева)
+  const calculateResultStats = useCallback((positionId: number, allInterviews: Interview[]) => {
+    const positionInterviews = allInterviews.filter(interview => interview.positionId === positionId);
+    
+    return {
+      interviewsTotal: positionInterviews.length,
+      // Успешные: результат SUCCESSFUL
+      interviewsSuccessful: positionInterviews.filter(i => i.result === 'SUCCESSFUL' as any).length,
+      // Неуспешные: результат UNSUCCESSFUL
+      interviewsUnsuccessful: positionInterviews.filter(i => i.result === 'UNSUCCESSFUL' as any).length,
+      // Не завершено: результат null (включая в процессе и не начатые)
+      interviewsNotFinished: positionInterviews.filter(i => !i.result).length,
+    };
+  }, []);
+
+  // Мемоизированная статистика для всех вакансий
+  const vacancyStats = useMemo(() => {
+    console.log('Recalculating vacancy stats for', filteredVacancies.length, 'vacancies');
+    const stats = new Map<number, {
+      interviewsTotal: number;
+      interviewsSuccessful: number;
+      interviewsUnsuccessful: number;
+      interviewsNotFinished: number;
+    }>();
+    
+    filteredVacancies.forEach(vacancy => {
+      const stat = calculateResultStats(vacancy.id, interviews);
+      stats.set(vacancy.id, stat);
+      console.log(`Vacancy ${vacancy.id} stats:`, stat);
+    });
+    
+    return stats;
+  }, [filteredVacancies, interviews, calculateResultStats]);
 
   // Открыть форму редактирования (переход с передачей данных)
   const handleEdit = () => {
@@ -145,29 +297,16 @@ const VacancyList: React.FC = () => {
     }
   };
 
-  const handleArchive = async (id: string) => {
-    if (window.confirm('Вы уверены, что хотите архивировать эту вакансию?')) {
-      try {
-        await mockApi.updatePosition(id, { status: 'archived' });
-        toast.success('Вакансия архивирована');
-        // Refetch vacancies
-        const data = await mockApi.getPositions({ status: statusFilter, search: searchTerm });
-        setVacancies(data.items);
-        if (selectedId === id) {
-          setSelectedId(data.items.length > 0 ? data.items[0].id : null);
-        }
-      } catch (error) {
-        console.error('Error archiving vacancy:', error);
-        toast.error('Не удалось архивировать вакансию');
-      }
-    }
-  };
-
   const handleCopyLink = (interviewId: string) => {
     const link = `${window.location.origin}/interview/${interviewId}`;
     navigator.clipboard.writeText(link);
     toast.success('Ссылка на собеседование скопирована!');
   };
+
+  // Если не аутентифицирован, не рендерим компонент
+  if (!authService.isAuthenticated()) {
+    return null;
+  }
 
   return (
     <div className="w-full">
@@ -264,28 +403,68 @@ const VacancyList: React.FC = () => {
             ) : (
               <ul className="flex flex-col gap-2 px-2 py-1">
                 {filteredVacancies.map(vacancy => {
-                  const isActive = selectedId === vacancy.id;
+                  const isActive = selectedId === vacancy.id.toString();
+                  
+                  // Используем статистику из API (которая уже загружена в vacancy.stats)
+                  const resultStats = (vacancy as any).stats ? {
+                    interviewsTotal: (vacancy as any).stats.interviewsTotal || 0,
+                    interviewsSuccessful: (vacancy as any).stats.interviewsSuccessful || 0,
+                    interviewsUnsuccessful: (vacancy as any).stats.interviewsUnsuccessful || 0,
+                    interviewsNotFinished: ((vacancy as any).stats.interviewsTotal || 0) - ((vacancy as any).stats.interviewsSuccessful || 0) - ((vacancy as any).stats.interviewsUnsuccessful || 0)
+                  } : {
+                    interviewsTotal: 0,
+                    interviewsSuccessful: 0,
+                    interviewsUnsuccessful: 0,
+                    interviewsNotFinished: 0
+                  };
+                  
                   return (
                     <li
                       key={vacancy.id}
                       className={`group relative flex items-center gap-3 rounded-xl px-3 py-3 cursor-pointer transition-all min-h-[56px] ${isActive ? 'bg-primary-50 border-l-4 border-primary-500 shadow-sm' : 'hover:bg-gray-50 border-l-4 border-transparent'}`}
-                      onClick={() => setSelectedId(vacancy.id)}
+                      onClick={() => {
+                        console.log('Selecting vacancy:', vacancy.id, 'with stats:', resultStats);
+                        setSelectedId(vacancy.id.toString());
+                      }}
                       title={vacancy.title}
                     >
                       {/* Левая часть: текст */}
                       <div className="flex flex-col gap-0.5 flex-1 min-w-0">
-                        <div className="font-semibold text-base text-gray-900 truncate group-hover:underline" title={vacancy.title}>{vacancy.title}</div>
-                        <div className="text-xs text-gray-400 truncate" title={vacancy.topics?.join(', ')}>{vacancy.topics?.join(', ')}</div>
+                        <div className="font-semibold text-base text-gray-900 truncate group-hover:underline" title={vacancy.title}>{truncateTitle(vacancy.title)}</div>
+                        <div className="text-xs text-gray-400 truncate" title={truncateTopics(vacancy.topics)}>{truncateTopics(vacancy.topics)}</div>
                       </div>
                       {/* Правая часть: индикаторы и счетчик */}
                       <div className="flex flex-col items-end gap-1 min-w-[56px]">
                         <span className="flex w-16 h-5 rounded-lg overflow-hidden border border-gray-200">
-                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-green-500" title="Успешно">{vacancy.stats?.interviewsSuccessful || 0}</span>
-                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-yellow-400" title="В процессе">{vacancy.stats?.interviewsInProgress || 0}</span>
-                          <span className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-red-500" title="Неуспешно">{vacancy.stats?.interviewsUnsuccessful || 0}</span>
+                          <span 
+                            key={`success-${vacancy.id}`}
+                            className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-green-500" 
+                            title="Успешно"
+                          >
+                            {resultStats.interviewsSuccessful}
+                          </span>
+                          <span 
+                            key={`not-finished-${vacancy.id}`}
+                            className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-gray-400" 
+                            title="Не завершено"
+                          >
+                            {resultStats.interviewsNotFinished}
+                          </span>
+                          <span 
+                            key={`unsuccessful-${vacancy.id}`}
+                            className="flex-1 flex items-center justify-center text-[11px] font-bold text-white bg-red-500" 
+                            title="Неуспешно"
+                          >
+                            {resultStats.interviewsUnsuccessful}
+                          </span>
                         </span>
                         <div className="flex items-center gap-1 mt-0.5">
-                          <span className="text-xs text-gray-400 font-medium">{vacancy.stats?.interviewsTotal || 0}</span>
+                          <span 
+                            key={`total-${vacancy.id}`}
+                            className="text-xs text-gray-400 font-medium"
+                          >
+                            {resultStats.interviewsTotal}
+                          </span>
                           <MoreVertical className="h-4 w-4 text-gray-300 opacity-0 group-hover:opacity-100 transition" />
                         </div>
                       </div>
@@ -306,14 +485,14 @@ const VacancyList: React.FC = () => {
               <div className="flex items-center justify-between gap-6 min-h-[44px]">
                 <div className="flex-1 flex flex-col">
                   <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2 truncate" title={selectedVacancy.title}>
-                    {selectedVacancy.title}
+                    {truncateTitleDetails(selectedVacancy.title)}
                   </h2>
                   <div
                     className="text-xs text-gray-500 mt-1 truncate"
                     style={{ minHeight: '20px' }}
-                    title={selectedVacancy.topics?.join(', ')}
+                    title={truncateTopicsDetails(selectedVacancy.topics)}
                   >
-                    {selectedVacancy.topics?.join(', ')}
+                    {truncateTopicsDetails(selectedVacancy.topics)}
                   </div>
                 </div>
                 <div className="flex gap-3 items-center">
@@ -342,14 +521,19 @@ const VacancyList: React.FC = () => {
                             onClick={async () => {
                               if (status !== selectedVacancy.status) {
                                 try {
-                                  await mockApi.updatePosition(selectedVacancy.id, { status });
+                                  await apiService.updatePosition(selectedVacancy.id, { status });
                                   toast.success('Статус обновлен');
-                                  // Обновить список вакансий
-                                  const params: any = { search: searchTerm };
-                                  if (statusFilter) params.status = statusFilter;
-                                  const data = await mockApi.getPositions(params);
-                                  setVacancies(data.items);
+                                  
+                                  // Обновляем только локальное состояние выбранной вакансии
+                                  setVacancies(prevVacancies => 
+                                    prevVacancies.map(vacancy => 
+                                      vacancy.id === selectedVacancy.id 
+                                        ? { ...vacancy, status } 
+                                        : vacancy
+                                    )
+                                  );
                                 } catch (error) {
+                                  console.error('Error updating position status:', error);
                                   toast.error('Не удалось обновить статус');
                                 }
                               }
@@ -371,27 +555,27 @@ const VacancyList: React.FC = () => {
               <div className="bg-white rounded-lg border border-gray-100 p-6 shadow-soft">
                 <div
                   className="grid items-center mb-4 gap-4"
-                  style={{ gridTemplateColumns: 'minmax(120px,1fr) minmax(220px,3fr) minmax(60px,0.7fr) minmax(110px,1fr) minmax(60px,0.7fr)' }}
+                  style={{ gridTemplateColumns: 'minmax(120px,1fr) minmax(220px,3fr) minmax(110px,1fr) minmax(60px,0.7fr) minmax(60px,0.7fr)' }}
                 >
                   <div>
                     <div className="text-xs text-gray-500 font-normal text-left mb-1">Название</div>
-                    <div className="font-medium text-base text-left truncate" title={selectedVacancy.title}>{selectedVacancy.title}</div>
+                    <div className="font-medium text-base text-left truncate" title={selectedVacancy.title}>{truncateTitleDetails(selectedVacancy.title)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-normal text-left mb-1">Топики</div>
-                    <div className="font-medium text-base text-left truncate max-w-[420px]" title={selectedVacancy.topics?.join(', ')}>{selectedVacancy.topics?.join(', ')}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500 font-normal text-left mb-1">min балл</div>
-                    <div className="font-medium text-base text-left pl-2">{selectedVacancy.minScore}</div>
+                    <div className="font-medium text-base text-left truncate max-w-[420px]" title={truncateTopicsDetails(selectedVacancy.topics)}>{truncateTopicsDetails(selectedVacancy.topics)}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500 font-normal text-center mb-1">Создано</div>
                     <div className="font-medium text-base text-center truncate" title={selectedVacancy.createdAt}>{formatDate(selectedVacancy.createdAt)}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-500 font-normal text-left mb-1">avg балл</div>
-                    <div className="font-medium text-base text-left pl-2">{selectedVacancy.avgScore}</div>
+                    <div className="text-xs text-gray-500 font-normal text-center mb-1">min балл</div>
+                    <div className="font-medium text-base text-center">{selectedVacancy.minScore}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500 font-normal text-center mb-1">avg балл</div>
+                    <div className="font-medium text-base text-center">{(selectedVacancy as any).avgScore ?? 0}</div>
                   </div>
                 </div>
                 {/* Профессиональные вкладки */}
@@ -414,87 +598,272 @@ const VacancyList: React.FC = () => {
                 {vacancyTab === 'candidates' && (
                   <>
                     <div className="flex items-center gap-6 mb-4">
-                      <div className="text-sm">Всего: <span className="font-bold">{interviews.length}</span></div>
-                      <div className="text-sm">Завершено: <span className="font-bold text-green-600">{interviewStats.finished}</span></div>
-                      <div className="text-sm">В процессе: <span className="font-bold text-yellow-600">{interviewStats.inProgress}</span></div>
+                      {(() => {
+                        if (!selectedId) return null;
+                        const selectedVacancyInterviews = interviews.filter(interview => interview.positionId === parseInt(selectedId));
+                        return (
+                          <>
+                            <div className="text-sm">Всего: <span className="font-bold">{selectedVacancyInterviews.length}</span></div>
+                            <div className="text-sm">Завершено: <span className="font-bold text-green-600">{selectedVacancyInterviews.filter(i => i.status === 'finished').length}</span></div>
+                            <div className="text-sm">В процессе: <span className="font-bold text-yellow-600">{selectedVacancyInterviews.filter(i => i.status === 'in_progress').length}</span></div>
+                            <div className="text-sm">Не начато: <span className="font-bold text-gray-600">{selectedVacancyInterviews.filter(i => !i.status || i.status === 'not_started').length}</span></div>
+                          </>
+                        );
+                      })()}
                     </div>
-                    {interviewsLoading ? (
-                      <div>Загрузка собеседований...</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                          <thead className="bg-gray-50">
-                            <tr>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кандидат</th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата создания</th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата окончания</th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Оценка</th>
-                              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ссылка</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {interviews.map(interview => {
-                              const candidate = candidates.find(c => c.id === interview.candidateId);
-                              const statusKey = (interview.result || interview.status) as keyof typeof interviewStatusMap;
-                              const statusInfo = interviewStatusMap[statusKey];
-
-                              return (
-                                <tr key={interview.id}>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm font-medium text-gray-900">{candidate?.name || 'Неизвестный кандидат'}</div>
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap">
-                                    {statusInfo && (
-                                      <span className="flex items-center gap-2 text-sm text-gray-700">
-                                        {statusInfo.icon}
-                                        {statusInfo.text}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatDate(interview.startedAt)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    {formatDate(interview.finishedAt)}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                    {interview.aiScore || '-'}
-                                  </td>
-                                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                    <div className="flex items-center gap-3">
-                                      <Link to={`/interview/${interview.id}`} title="Перейти к интервью">
-                                        <Link2 className="h-5 w-5 text-primary-500 hover:text-primary-700" />
-                                      </Link>
-                                      <button onClick={() => handleCopyLink(interview.id)} title="Скопировать ссылку">
-                                        <Copy className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
+                    
+                    {/* Список кандидатов вакансии */}
+                    {(selectedVacancy as any).candidates && (selectedVacancy as any).candidates.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-md font-semibold text-gray-900 mb-3">Кандидаты вакансии</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
+                          {(selectedVacancy as any).candidates.map((candidate: any) => (
+                            <div key={candidate.id} className="p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                                  <span className="text-sm font-medium text-primary-700">
+                                    {candidate.firstName?.[0] || 'C'}{candidate.lastName?.[0] || ''}
+                                  </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-gray-900 truncate">
+                                    {candidate.firstName || 'Кандидат'} {candidate.lastName || ''}
+                                  </div>
+                                  <div className="text-xs text-gray-500 truncate">{candidate.email || 'Email не указан'}</div>
+                                  <div className="text-xs text-gray-400">{candidate.phone || 'Телефон не указан'}</div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
+
+                    {/* Список собеседований */}
+                    <div>
+                      <h4 className="text-md font-semibold text-gray-900 mb-3">Собеседования</h4>
+                      {interviewsLoading ? (
+                        <div>Загрузка собеседований...</div>
+                      ) : (
+                        <div className="overflow-x-auto">
+                          <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                              <tr>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Кандидат</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Статус</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата создания</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата старта</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Дата окончания</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Оценка</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ссылка</th>
+                              </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                              {(() => {
+                                if (!selectedId) return null;
+                                const selectedVacancyInterviews = interviews.filter(interview => interview.positionId === parseInt(selectedId));
+                                return selectedVacancyInterviews.map(interview => {
+                                  const candidate = candidates.find(c => c.id === interview.candidateId);
+                                  
+                                  // Определяем статус: если есть дата окончания, но нет результата - значит на оценке
+                                  let statusKey: keyof typeof interviewStatusMap;
+                                  if (interview.finishedAt && !interview.result) {
+                                    statusKey = 'evaluating';
+                                  } else {
+                                    statusKey = (interview.result || interview.status) as keyof typeof interviewStatusMap;
+                                  }
+                                  
+                                  const statusInfo = interviewStatusMap[statusKey];
+
+                                  return (
+                                    <tr key={interview.id}>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        <div className="text-sm font-medium text-gray-900">{candidate?.name || 'Неизвестный кандидат'}</div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                        {statusInfo && (
+                                          <span className="flex items-center gap-2 text-sm text-gray-700">
+                                            {statusInfo.icon}
+                                            {statusInfo.text}
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {formatDate(interview.createdAt)}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {interview.startedAt ? formatDate(interview.startedAt) : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        {interview.finishedAt ? formatDate(interview.finishedAt) : '-'}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        {interview.aiScore !== null && interview.aiScore !== undefined ? 
+                                          Number(interview.aiScore).toFixed(2) : 
+                                          '-'
+                                        }
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                        <div className="flex items-center gap-3">
+                                          <Link to={`/interview/${interview.id}`} title="Перейти к интервью">
+                                            <Link2 className="h-5 w-5 text-primary-500 hover:text-primary-700" />
+                                          </Link>
+                                          <button onClick={() => handleCopyLink(interview.id.toString())} title="Скопировать ссылку">
+                                            <Copy className="h-5 w-5 text-gray-400 hover:text-gray-600" />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                });
+                              })()}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
                   </>
                 )}
                 {vacancyTab === 'description' && (
-                  <div className="flex flex-col gap-4 items-start py-4">
-                    <div className="text-gray-700 text-base whitespace-pre-line max-w-2xl">
-                      {selectedVacancy.description || 'Описание вакансии отсутствует.'}
+                  <div className="flex flex-col gap-6 items-start py-4">
+                    <div className="w-full">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-3">Описание вакансии</h3>
+                      <div className="text-gray-700 text-base whitespace-pre-line max-w-2xl">
+                        {selectedVacancy.description || 'Описание вакансии отсутствует.'}
+                      </div>
                     </div>
-                  </div>
-                )}
-                {vacancyTab === 'comments' && (
-                  <div className="flex flex-col gap-4 items-start py-4">
-                    <div className="text-gray-500 text-base italic">Нет комментариев. Оставьте первый комментарий к вакансии!</div>
+                    
+                    {/* Дополнительная информация */}
+                    <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Настройки записи */}
+                      <div className="space-y-4">
+                        <h4 className="text-md font-semibold text-gray-900">Настройки записи</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Сохранять аудио:</span>
+                            <span className={`font-medium ${selectedVacancy.saveAudio ? 'text-green-600' : 'text-gray-400'}`}>
+                              {selectedVacancy.saveAudio ? 'Да' : 'Нет'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Сохранять видео:</span>
+                            <span className={`font-medium ${selectedVacancy.saveVideo ? 'text-green-600' : 'text-gray-400'}`}>
+                              {selectedVacancy.saveVideo ? 'Да' : 'Нет'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Случайный порядок:</span>
+                            <span className={`font-medium ${selectedVacancy.randomOrder ? 'text-green-600' : 'text-gray-400'}`}>
+                              {selectedVacancy.randomOrder ? 'Да' : 'Нет'}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-gray-600">Показывать на другом языке:</span>
+                            <span className={`font-medium ${selectedVacancy.showOtherLang ? 'text-green-600' : 'text-gray-400'}`}>
+                              {selectedVacancy.showOtherLang ? 'Да' : 'Нет'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Команда */}
+                    {(selectedVacancy as any).team && (selectedVacancy as any).team.length > 0 && (
+                      <div className="w-full">
+                        <h4 className="text-md font-semibold text-gray-900 mb-3">Команда</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                          {(selectedVacancy as any).team.map((user: any) => (
+                            <div key={user.id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
+                              <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                                <span className="text-sm font-medium text-primary-700">
+                                  {user.firstName?.[0] || 'U'}{user.lastName?.[0] || ''}
+                                </span>
+                              </div>
+                              <div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {user.firstName || 'Пользователь'} {user.lastName || ''}
+                                </div>
+                                <div className="text-xs text-gray-500">{user.email || 'Email не указан'}</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Брендинг */}
+                    {(selectedVacancy as any).branding && (
+                      <div className="w-full">
+                        <h4 className="text-md font-semibold text-gray-900 mb-3">Брендинг</h4>
+                        <div className="p-4 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-4">
+                            {(selectedVacancy as any).branding.logoUrl && (
+                              <img 
+                                src={(selectedVacancy as any).branding.logoUrl} 
+                                alt="Логотип" 
+                                className="w-12 h-12 object-contain"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
+                            )}
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">
+                                {(selectedVacancy as any).branding.companyName || 'Название компании'}
+                              </div>
+                              {(selectedVacancy as any).branding.primaryColor && (
+                                <div className="text-xs text-gray-500">
+                                  Основной цвет: {(selectedVacancy as any).branding.primaryColor}
+                                </div>
+                              )}
+                              {(selectedVacancy as any).branding.secondaryColor && (
+                                <div className="text-xs text-gray-500">
+                                  Дополнительный цвет: {(selectedVacancy as any).branding.secondaryColor}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {vacancyTab === 'questions' && (
                   <div className="flex flex-col gap-4 items-start py-4">
-                    <div className="text-gray-500 text-base italic">Вопросы для собеседования будут отображаться здесь.</div>
+                    {questionsLoading ? (
+                      <div className="text-gray-500 text-base">Загрузка вопросов...</div>
+                    ) : questions.length === 0 ? (
+                      <div className="text-gray-500 text-base italic">Вопросы для собеседования отсутствуют.</div>
+                    ) : (
+                      <div className="w-full">
+                        <div className="text-sm text-gray-600 mb-4">Всего вопросов: <span className="font-bold">{questions.length}</span></div>
+                        <div className="space-y-4">
+                          {questions.map((question, index) => (
+                            <div key={question.id} className="border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium text-gray-500">Вопрос {index + 1}</span>
+                                  <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                                    {question.type}
+                                  </span>
+                                </div>
+                                {question.isRequired && (
+                                  <span className="text-xs bg-red-100 text-red-600 px-2 py-1 rounded">
+                                    Обязательный
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-gray-900 mb-2">{question.text}</div>
+                              {question.evaluationCriteria && (
+                                <div className="text-sm text-gray-600">
+                                  <strong>Критерии оценки:</strong> {question.evaluationCriteria}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

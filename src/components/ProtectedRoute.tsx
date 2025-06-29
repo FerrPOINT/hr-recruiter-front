@@ -9,22 +9,15 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const location = useLocation();
-  const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
   useEffect(() => {
     const checkAuth = () => {
-      if (useMock) {
-        // В mock режиме считаем пользователя авторизованным
-        setIsAuthenticated(true);
-      } else {
-        // Проверяем авторизацию через authService
-        const authenticated = authService.isAuthenticated();
-        setIsAuthenticated(authenticated);
-      }
+      // Проверяем авторизацию через authService
+      const authenticated = authService.isAuthenticated();
+      setIsAuthenticated(authenticated);
     };
-
     checkAuth();
-  }, [useMock]);
+  }, []);
 
   // Показываем загрузку пока проверяем авторизацию
   if (isAuthenticated === null) {

@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Calendar } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { ArrowLeft, Calendar } from 'lucide-react';
+import { apiService } from '../services/apiService';
+import toast from 'react-hot-toast';
 
 const InterviewCreate: React.FC = () => {
   const navigate = useNavigate();
@@ -24,16 +23,18 @@ const InterviewCreate: React.FC = () => {
   useEffect(() => {
     setLoadingVacancies(true);
     (async () => {
-      let data;
-      if (useMock) {
-        const res = await mockApi.getPositions({ status: 'active' });
-        data = res.items;
-      } else {
-        const res = await mockApi.getPositions({ status: 'active' });
-        data = res.items;
+      try {
+        const res = await apiService.getPositions();
+        setVacancies(res.items);
+      } catch (error: any) {
+        console.error('Error loading vacancies:', error);
+        console.error('Error response:', error.response?.data);
+        console.error('Error status:', error.response?.status);
+        console.error('Error message:', error.message);
+        toast.error('Ошибка загрузки вакансий');
+      } finally {
+        setLoadingVacancies(false);
       }
-      setVacancies(data);
-      setLoadingVacancies(false);
     })();
   }, []);
 
@@ -51,17 +52,20 @@ const InterviewCreate: React.FC = () => {
     
     try {
       // Создание кандидата
-      const candidate = await mockApi.createCandidate(formData.vacancyId, {
-        name: `${formData.firstName} ${formData.lastName}`,
+      const candidate = await apiService.createCandidate(parseInt(formData.vacancyId), {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
         email: formData.email,
       });
       
       // Начало интервью
-      await mockApi.startInterview(candidate.id);
+      await apiService.startInterview(candidate.id);
       
-      navigate('/interviews');
+      toast.success('Собеседование создано');
+      navigate('/vacancies');
     } catch (error) {
       console.error('Error creating interview:', error);
+      toast.error('Ошибка создания собеседования');
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +77,7 @@ const InterviewCreate: React.FC = () => {
         <ArrowLeft className="h-5 w-5 mr-2" /> Назад
       </button>
       <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-lg w-full flex flex-col gap-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Настройки собеседования</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Новое собеседование</h2>
         <div className="text-gray-500 text-base mb-6">
           Заполните все поля для создания собеседования
         </div>

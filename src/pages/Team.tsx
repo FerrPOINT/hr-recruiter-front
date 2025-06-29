@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit, Trash2, User } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { ArrowLeft, Plus, Edit, Trash2 } from 'lucide-react';
+import { apiService } from '../services/apiService';
+import toast from 'react-hot-toast';
 
 const Team: React.FC = () => {
   const navigate = useNavigate();
@@ -12,7 +11,8 @@ const Team: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingUser, setEditingUser] = useState<any>(null);
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     role: 'recruiter',
     password: '',
@@ -21,48 +21,73 @@ const Team: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getUsers();
-      } else {
-        data = await mockApi.getUsers();
+      try {
+        const data = await apiService.getUsers();
+        if (Array.isArray(data)) {
+          setUsers(data);
+        } else {
+          console.error('getUsers returned non-array:', data);
+          setUsers([]);
+          toast.error('Неверный формат данных пользователей');
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
+        toast.error('Ошибка загрузки пользователей');
+        setUsers([]);
+      } finally {
+        setLoading(false);
       }
-      setUsers(data);
-      setLoading(false);
     })();
   }, []);
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const newUser = await mockApi.createUser(formData);
+      const newUser = await apiService.createUser({
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        role: formData.role,
+        password: formData.password
+      });
       setUsers([...users, newUser]);
       setShowCreateForm(false);
-      setFormData({ name: '', email: '', role: 'recruiter', password: '' });
+      setFormData({ firstName: '', lastName: '', email: '', role: 'recruiter', password: '' });
+      toast.success('Пользователь создан');
     } catch (error) {
       console.error('Error creating user:', error);
+      toast.error('Ошибка создания пользователя');
     }
   };
 
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const updatedUser = await mockApi.updateUser(editingUser.id, formData);
+      const updatedUser = await apiService.updateUser(editingUser.id, {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        role: formData.role
+      });
       setUsers(users.map(u => u.id === editingUser.id ? updatedUser : u));
       setEditingUser(null);
-      setFormData({ name: '', email: '', role: 'recruiter', password: '' });
+      setFormData({ firstName: '', lastName: '', email: '', role: 'recruiter', password: '' });
+      toast.success('Пользователь обновлен');
     } catch (error) {
       console.error('Error updating user:', error);
+      toast.error('Ошибка обновления пользователя');
     }
   };
 
   const handleDeleteUser = async (userId: string) => {
     if (window.confirm('Вы уверены, что хотите удалить этого пользователя?')) {
       try {
-        await mockApi.deleteUser(userId);
+        await apiService.deleteUser(parseInt(userId));
         setUsers(users.filter(u => u.id !== userId));
+        toast.success('Пользователь удален');
       } catch (error) {
         console.error('Error deleting user:', error);
+        toast.error('Ошибка удаления пользователя');
       }
     }
   };
@@ -70,9 +95,10 @@ const Team: React.FC = () => {
   const openEditForm = (user: any) => {
     setEditingUser(user);
     setFormData({
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      email: user.email || '',
+      role: user.role || 'recruiter',
       password: '',
     });
   };
@@ -98,12 +124,12 @@ const Team: React.FC = () => {
           <div className="text-center py-8 text-gray-400">Загрузка...</div>
         ) : (
           <div className="grid gap-4">
-            {users.map((user) => (
+            {Array.isArray(users) && users.map((user) => (
               <div key={user.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                 <div className="flex items-center gap-4">
                   <img src={user.avatarUrl} alt={user.name} className="w-10 h-10 rounded-full" />
                   <div>
-                    <div className="font-medium text-gray-900">{user.name}</div>
+                    <div className="font-medium text-gray-900">{`${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Пользователь'}</div>
                     <div className="text-sm text-gray-500">{user.email}</div>
                     <div className="text-xs text-gray-400 capitalize">{user.role}</div>
                   </div>
@@ -124,6 +150,9 @@ const Team: React.FC = () => {
                 </div>
               </div>
             ))}
+            {Array.isArray(users) && users.length === 0 && (
+              <div className="text-center py-8 text-gray-400">Пользователи не найдены</div>
+            )}
           </div>
         )}
 
@@ -139,8 +168,18 @@ const Team: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Имя</label>
                   <input
                     type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="input-field"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Фамилия</label>
+                  <input
+                    type="text"
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                     className="input-field"
                     required
                   />
@@ -188,7 +227,7 @@ const Team: React.FC = () => {
                     onClick={() => {
                       setShowCreateForm(false);
                       setEditingUser(null);
-                      setFormData({ name: '', email: '', role: 'recruiter', password: '' });
+                      setFormData({ firstName: '', lastName: '', email: '', role: 'recruiter', password: '' });
                     }}
                     className="btn-secondary flex-1"
                   >

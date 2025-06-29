@@ -9,11 +9,10 @@ import {
   CheckCircle,
   XCircle
 } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
+import { apiService } from '../services/apiService';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import toast from 'react-hot-toast';
 
 const iconMap: { [key: string]: React.ElementType } = {
   briefcase: Briefcase,
@@ -58,27 +57,24 @@ const Stats: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        if (useMock) {
-          const rawStats = await mockApi.getStats();
-          const [interviewsData] = await Promise.all([
-            mockApi.getInterviewStats(),
-          ]);
-          
-          // Convert stats to the expected format
-          const statsData = [
-            { name: 'Активные вакансии', label: 'Активные вакансии', value: rawStats.totalCandidates || 0, delta: `+${Math.floor(Math.random() * 3)}`, icon: 'briefcase' },
-            { name: 'Всего кандидатов', label: 'Всего кандидатов', value: rawStats.totalCandidates || 0, delta: `+${Math.floor(Math.random() * 10)}`, icon: 'users' },
-            { name: 'Успешных интервью', label: 'Успешных интервью', value: rawStats.successfulInterviews || 0, delta: `+${Math.floor(Math.random() * 5)}`, icon: 'check' },
-            { name: 'Средний балл', label: 'Средний балл', value: rawStats.successRate ? `${rawStats.successRate}%` : '7.8', delta: '+0.1', icon: 'trending-up' },
-          ];
-          
-          setStats(statsData);
-          setRecentInterviews(interviewsData || []);
-        } else {
-          // TODO: Real API calls
-        }
+        const [rawStats, interviewsResponse] = await Promise.all([
+          apiService.getStats(),
+          apiService.getInterviews({ page: 1, size: 10 })
+        ]);
+        
+        // Convert stats to the expected format
+        const statsData = [
+          { name: 'Активные вакансии', label: 'Активные вакансии', value: rawStats.totalCandidates || 0, delta: `+${Math.floor(Math.random() * 3)}`, icon: 'briefcase' },
+          { name: 'Всего кандидатов', label: 'Всего кандидатов', value: rawStats.totalCandidates || 0, delta: `+${Math.floor(Math.random() * 10)}`, icon: 'users' },
+          { name: 'Успешных интервью', label: 'Успешных интервью', value: rawStats.successfulInterviews || 0, delta: `+${Math.floor(Math.random() * 5)}`, icon: 'check' },
+          { name: 'Средний балл', label: 'Средний балл', value: rawStats.successRate ? `${rawStats.successRate}%` : '7.8', delta: '+0.1', icon: 'trending-up' },
+        ];
+        
+        setStats(statsData);
+        setRecentInterviews(interviewsResponse.items || []);
       } catch (err) {
         console.error('Error loading stats data:', err);
+        toast.error('Ошибка загрузки статистики');
       } finally {
         setLoading(false);
       }

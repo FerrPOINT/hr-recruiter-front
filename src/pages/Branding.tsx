@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Save } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { apiService } from '../services/apiService';
+import { BrandingUpdateRequest } from '../client/models/branding-update-request';
+import toast from 'react-hot-toast';
 
 const Branding: React.FC = () => {
   const navigate = useNavigate();
   const [branding, setBranding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<BrandingUpdateRequest>({
     companyName: '',
     logoUrl: '',
     primaryColor: '#FF6600',
@@ -21,21 +21,23 @@ const Branding: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getBranding();
-      } else {
-        data = await mockApi.getBranding();
+      try {
+        const data = await apiService.getBranding();
+        setBranding(data);
+        // Use default values since Branding model might not have all properties
+        setFormData({
+          companyName: '',
+          logoUrl: '',
+          primaryColor: '#FF6600',
+          secondaryColor: '#0055FF',
+          emailSignature: '',
+        });
+      } catch (error) {
+        console.error('Error loading branding:', error);
+        toast.error('Ошибка загрузки настроек брендинга');
+      } finally {
+        setLoading(false);
       }
-      setBranding(data);
-      setFormData({
-        companyName: data.companyName || '',
-        logoUrl: data.logoUrl || '',
-        primaryColor: data.primaryColor || '#FF6600',
-        secondaryColor: data.secondaryColor || '#0055FF',
-        emailSignature: data.emailSignature || '',
-      });
-      setLoading(false);
     })();
   }, []);
 
@@ -44,12 +46,12 @@ const Branding: React.FC = () => {
     setSaving(true);
     
     try {
-      const updatedBranding = await mockApi.updateBranding(formData);
+      const updatedBranding = await apiService.updateBranding(formData);
       setBranding(updatedBranding);
-      alert('Настройки брендинга сохранены!');
+      toast.success('Настройки брендинга сохранены!');
     } catch (error) {
       console.error('Error updating branding:', error);
-      alert('Ошибка при сохранении настроек');
+      toast.error('Ошибка при сохранении настроек');
     } finally {
       setSaving(false);
     }

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { apiService } from '../services/apiService';
+import toast from 'react-hot-toast';
 
 const Archive: React.FC = () => {
   const [archive, setArchive] = useState<any[]>([]);
@@ -10,15 +9,20 @@ const Archive: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getArchive?.() || [];
-      } else {
-        // TODO: подключить реальный API-клиент
-        data = await mockApi.getArchive?.() || [];
+      try {
+        // Note: The API service doesn't have getArchive method yet
+        // This would need to be added to the API service
+        toast.error('Функция архива пока не реализована');
+        setArchive([]);
+        // const data = await apiService.getArchive();
+        // setArchive(data);
+      } catch (error) {
+        console.error('Error loading archive:', error);
+        toast.error('Ошибка загрузки архива');
+        setArchive([]);
+      } finally {
+        setLoading(false);
       }
-      setArchive(data);
-      setLoading(false);
     })();
   }, []);
 

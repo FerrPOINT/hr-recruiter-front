@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
+import { authService } from '../services/authService';
 import toast from 'react-hot-toast';
 
 const Login: React.FC = () => {
@@ -15,31 +16,12 @@ const Login: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Имитируем задержку для реалистичности
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // В демо-режиме всегда успешно логинимся с любыми данными
-      const userName = email ? email.split('@')[0] : 'Пользователь';
-      const userRole = email?.includes('admin') ? 'admin' : email?.includes('viewer') ? 'viewer' : 'recruiter';
-
-      const user = {
-        id: 'user-' + Date.now(),
-        name: userName.charAt(0).toUpperCase() + userName.slice(1) + ' Пользователь',
-        email: email || 'test@example.com',
-        role: userRole,
-        avatarUrl: `https://randomuser.me/api/portraits/${userRole === 'admin' ? 'men' : 'women'}/${Math.floor(Math.random() * 50)}.jpg`,
-        language: 'Русский'
-      };
-
-      // Сохраняем данные пользователя
-      sessionStorage.setItem('currentUser', JSON.stringify(user));
-      sessionStorage.setItem('isAuthenticated', 'true');
-
+      const response = await authService.login(email, password);
       toast.success('Вход выполнен успешно');
       navigate('/');
     } catch (error: any) {
       console.error('Login error:', error);
-      toast.error('Произошла ошибка при входе');
+      toast.error('Ошибка входа. Проверьте email и пароль.');
     } finally {
       setIsLoading(false);
     }
@@ -60,11 +42,6 @@ const Login: React.FC = () => {
             <p className="mt-2 text-center text-sm text-gray-600">
               Платформа для автоматизированных HR-собеседований
             </p>
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
-              <p className="text-sm text-blue-800">
-                <strong>Демо-режим:</strong> Введите любые данные для входа
-              </p>
-            </div>
           </div>
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-4">
@@ -85,6 +62,7 @@ const Login: React.FC = () => {
                       onChange={(e) => setEmail(e.target.value)}
                       className="input-field pl-10"
                       placeholder="Введите ваш email"
+                      required
                   />
                 </div>
               </div>
@@ -105,6 +83,7 @@ const Login: React.FC = () => {
                       onChange={(e) => setPassword(e.target.value)}
                       className="input-field pl-10 pr-10"
                       placeholder="Введите ваш пароль"
+                      required
                   />
                   <button
                       type="button"

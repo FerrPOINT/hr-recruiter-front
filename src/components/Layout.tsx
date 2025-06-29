@@ -2,21 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home,
-  Archive,
   BarChart2,
-  Brush,
   Users,
   User,
-  GraduationCap,
   LogOut,
-  Globe,
-  Mail,
   Plus,
-  Settings,
   Palette,
   CreditCard,
 } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
+import { apiService } from '../services/apiService';
 import { authService } from '../services/authService';
 import toast from 'react-hot-toast';
 
@@ -25,9 +19,9 @@ interface UserInfo {
   language: string;
 }
 
-interface TariffInfo {
-  interviewsLeft: number;
-  until: string;
+interface VacancyInfo {
+  id: number;
+  title: string;
 }
 
 const sidebarMenu = [
@@ -37,38 +31,49 @@ const sidebarMenu = [
 ];
 
 const Layout: React.FC = () => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [tariffInfo, setTariffInfo] = useState<TariffInfo | null>(null);
+  const [vacancies, setVacancies] = useState<VacancyInfo[]>([]);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const location = useLocation();
-  const isVacancyPage = location.pathname.startsWith('/vacancies');
   const isInterviewSession = location.pathname.startsWith('/interview');
   const isInterviewCreatePage = location.pathname === '/interviews/create';
   const isVacancyCreatePage = location.pathname === '/vacancies/create';
   const navigate = useNavigate();
 
-  const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
-
   useEffect(() => {
+    // Проверяем аутентификацию перед загрузкой данных
+    const authStatus = authService.isAuthenticated();
+    setIsAuthenticated(authStatus);
+    
+    if (!authStatus) {
+      navigate('/login');
+      return;
+    }
+    
     const fetchData = async () => {
       try {
-        let user, tariff;
-        if (useMock) {
-          user = await mockApi.getAccount();
-          tariff = await mockApi.getTariffInfo();
-        } else {
-          // Для real API пока используем mock данные для UI
-          user = await mockApi.getAccount();
-          tariff = await mockApi.getTariffInfo();
-        }
+        const [user, vacanciesData] = await Promise.all([
+          apiService.getAccount(),
+          apiService.getPositions()
+        ]);
+        
         setUserInfo({
           email: user.email || '',
           language: user.language || 'Русский',
         });
-        setTariffInfo(tariff);
+        setVacancies(vacanciesData.items?.map(vacancy => ({
+          id: vacancy.id,
+          title: vacancy.title || 'Без названия'
+        })) || []);
       } catch (error: any) {
         console.error('Error loading user data:', error);
+        console.error('Error response:', error.response?.data);
+        console.error('Error status:', error.response?.status);
+        console.error('Error message:', error.message);
         if (error.response?.status === 401) {
+          // Очищаем данные аутентификации и перенаправляем на логин
+          authService.logout();
+          setIsAuthenticated(false);
           navigate('/login');
         }
       }
@@ -81,7 +86,19 @@ const Layout: React.FC = () => {
     return location.pathname === path;
   };
 
-  console.log('Layout render:', { location: location.pathname, isInterviewSession, isInterviewCreatePage });
+  console.log('Layout render:', { location: location.pathname, isInterviewSession, isInterviewCreatePage, isAuthenticated });
+
+  // Не рендерим Layout, пока не проверим аутентификацию
+  if (isAuthenticated === null) {
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="text-gray-500">Проверка аутентификации...</div>
+    </div>;
+  }
+
+  // Если не аутентифицирован, не рендерим Layout
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -157,11 +174,7 @@ const Layout: React.FC = () => {
               className="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 hover:text-primary-700 w-full mt-2"
               onClick={async () => {
                 try {
-                  if (useMock) {
-                    await mockApi.logout();
-                  } else {
-                    await authService.logout();
-                  }
+                  await authService.logout();
                   toast.success('Выход выполнен успешно');
                   navigate('/login');
                 } catch (error: any) {
@@ -180,9 +193,9 @@ const Layout: React.FC = () => {
         {/* Нижние блоки */}
         <div className="p-4 space-y-3 border-t border-gray-100">
           {/* Тариф/статистика */}
-          {tariffInfo ? (
+          {userInfo ? (
             <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 mb-2">
-              <div className="mb-1">Лимит собеседований: осталось {tariffInfo.interviewsLeft} до {tariffInfo.until}</div>
+              <div className="mb-1">Лимит собеседований: осталось {vacancies.length} до {new Date().toLocaleDateString()}</div>
               <Link to="/tariff" className="text-primary-600 hover:underline">Настройки тарифа →</Link>
             </div>
           ) : (
@@ -199,7 +212,10 @@ const Layout: React.FC = () => {
           <button
             type="button"
             className="-m-2.5 p-2.5 text-gray-700 lg:hidden"
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => {
+              // TODO: Добавить мобильное меню
+              console.log('Mobile menu not implemented yet');
+            }}
           >
             <Plus className="h-6 w-6" />
           </button>

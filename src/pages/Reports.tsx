@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { FileText } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
+import { apiService } from '../services/apiService';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import toast from 'react-hot-toast';
 
 const formatDate = (dateString: string | undefined) => {
   if (!dateString) return '–';
@@ -22,15 +21,16 @@ const Reports: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getReports?.() || [];
-      } else {
-        // TODO: подключить реальный API-клиент
-        data = await mockApi.getReports?.() || [];
+      try {
+        const data = await apiService.getReports();
+        setReports(data);
+      } catch (error) {
+        console.error('Error loading reports:', error);
+        toast.error('Ошибка загрузки отчетов');
+        setReports([]);
+      } finally {
+        setLoading(false);
       }
-      setReports(data);
-      setLoading(false);
     })();
   }, []);
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Save, X, User, Mail, Phone, Globe, Shield } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
+import { apiService } from '../services/apiService';
 import { authService } from '../services/authService';
 import toast from 'react-hot-toast';
 
@@ -26,11 +26,10 @@ const Account: React.FC = () => {
     setLoading(true);
     (async () => {
       try {
-        // Всегда используем mock API для демонстрации
-        const data = await mockApi.getAccount?.();
+        const data = await apiService.getAccount();
         const userData: UserData = {
-          id: data.id,
-          name: data.name || '',
+          id: data.id?.toString() || '',
+          name: `${data.firstName || ''} ${data.lastName || ''}`.trim() || 'Пользователь',
           email: data.email || '',
           role: data.role || 'recruiter',
           avatarUrl: data.avatarUrl,
@@ -56,8 +55,7 @@ const Account: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      // В mock режиме просто очищаем данные
-      sessionStorage.removeItem('currentUser');
+      await authService.logout();
       toast.success('Выход выполнен успешно');
       navigate('/login');
     } catch (error: any) {
@@ -82,10 +80,25 @@ const Account: React.FC = () => {
     if (!editData) return;
     
     try {
-      // Для mock просто обновляем локальное состояние
-      setUser(editData);
-      // Обновляем данные в sessionStorage
-      sessionStorage.setItem('currentUser', JSON.stringify(editData));
+      const updatedUser = await apiService.updateAccount({
+        firstName: editData.name.split(' ')[0] || '',
+        lastName: editData.name.split(' ').slice(1).join(' ') || '',
+        email: editData.email,
+        phone: editData.phone,
+        language: editData.language
+      });
+      
+      const userData: UserData = {
+        id: updatedUser.id?.toString() || '',
+        name: `${updatedUser.firstName || ''} ${updatedUser.lastName || ''}`.trim() || 'Пользователь',
+        email: updatedUser.email || '',
+        role: updatedUser.role || 'recruiter',
+        avatarUrl: updatedUser.avatarUrl,
+        language: updatedUser.language || 'Русский',
+        phone: updatedUser.phone,
+      };
+      
+      setUser(userData);
       toast.success('Профиль обновлен');
       setEditing(false);
     } catch (error: any) {

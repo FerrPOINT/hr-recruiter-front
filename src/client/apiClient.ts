@@ -25,15 +25,30 @@ export interface ApiClient {
     default: DefaultApi;
 }
 
+// Базовый адрес API для всех запросов
+const API_BASE_URL = 'http://localhost:8080/api/v1';
+
 export function createApiClient(
     username?: string, 
     password?: string, 
     basePath?: string
 ): ApiClient {
+    const finalBasePath = basePath || API_BASE_URL;
     const config = new Configuration({
         username,
         password,
-        basePath: basePath || process.env.REACT_APP_API_BASE_URL || 'http://localhost:8080'
+        basePath: finalBasePath,
+        baseOptions: {
+            // Убираем глобальный Content-Type, чтобы он не переопределял multipart/form-data
+            // headers: {
+            //     'Content-Type': 'application/json',
+            // },
+            // Правильная настройка Basic Auth для axios
+            auth: username && password ? {
+                username,
+                password
+            } : undefined
+        }
     });
 
     return {

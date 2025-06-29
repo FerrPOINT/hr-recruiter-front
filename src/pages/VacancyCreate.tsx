@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, RefreshCw, GripVertical } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
+import { apiService } from '../services/apiService';
+import { authService } from '../services/authService';
 import { PositionStatusEnum } from '../client/models/position-status-enum';
+import { QuestionTypeEnum } from '../client/models/question-type-enum';
+import toast from 'react-hot-toast';
 import {
   DndContext,
   closestCenter,
@@ -22,8 +25,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
 
 // Словарь для статуса вакансии (единственное число)
 const vacancyStatusMap: Record<PositionStatusEnum, { text: string; color: string }> = {
@@ -138,7 +139,7 @@ const VacancyCreate: React.FC = () => {
   const location = useLocation();
   
   // Табы формы
-  const [tab, setTab] = useState<'details' | 'company'>('details');
+  // const [tab, setTab] = useState<'details' | 'company'>('details');
   
   // Основные поля формы
   const [form, setForm] = useState({
@@ -167,6 +168,11 @@ const VacancyCreate: React.FC = () => {
   const [isGenLoading, setIsGenLoading] = useState(false);
   const [regeneratingQuestion, setRegeneratingQuestion] = useState<string | null>(null);
 
+  // Логируем изменения в вопросах
+  useEffect(() => {
+    console.log('Questions state updated:', questions);
+  }, [questions]);
+
   // DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -180,6 +186,7 @@ const VacancyCreate: React.FC = () => {
     // @ts-ignore
     const vacancy = location.state?.vacancy;
     if (vacancy) {
+      console.log('Editing vacancy:', vacancy);
       setForm({
         title: vacancy.title || '',
         status: vacancy.status || 'active',
@@ -199,15 +206,32 @@ const VacancyCreate: React.FC = () => {
         questionsCount: vacancy.questionsCount || 5,
         checkType: vacancy.checkType || '',
       });
-      if (vacancy.id && !questions?.length) {
-        // Если нет вопросов — загрузить их через mockApi
+      
+      // Всегда загружаем вопросы при редактировании, если есть ID вакансии
+      if (vacancy.id) {
+        console.log('Loading questions for vacancy ID:', vacancy.id);
         (async () => {
-          const qs = await mockApi.getQuestions(String(vacancy.id));
-          setQuestions(qs.map((q: any) => ({
-            id: q.id || Math.random().toString(36).substr(2, 9),
-            text: q.text,
-            evaluationCriteria: q.evaluationCriteria || 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
-          })));
+          try {
+            const qs = await apiService.getQuestions(vacancy.id);
+            console.log('Loaded questions:', qs);
+            
+            if (qs.questions && qs.questions.length > 0) {
+              const mappedQuestions = qs.questions.map((q: any) => ({
+                id: q.id?.toString() || Math.random().toString(36).substr(2, 9),
+                text: q.text,
+                evaluationCriteria: q.evaluationCriteria || 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
+              }));
+              console.log('Mapped questions:', mappedQuestions);
+              setQuestions(mappedQuestions);
+            } else {
+              console.log('No questions found for this vacancy');
+              setQuestions([]);
+            }
+          } catch (error) {
+            console.error('Error loading questions:', error);
+            toast.error('Ошибка загрузки вопросов');
+            setQuestions([]);
+          }
         })();
       }
     }
@@ -248,24 +272,22 @@ const VacancyCreate: React.FC = () => {
   const regenerateQuestion = async (questionId: string) => {
     setRegeneratingQuestion(questionId);
     try {
-      const result = await mockApi.generateQuestions({ 
-        description: form.description, 
-        questionsCount: 1 
-      });
-      if (result && result.length > 0) {
-        const newQuestion = result[0] as any;
+      const result = await apiService.generatePosition(form.description, 1, form.questionType);
+      if (result && result.questions && result.questions.length > 0) {
+        const newQuestion = result.questions[0];
         setQuestions(qs => qs.map(q => 
           q.id === questionId 
             ? { 
                 ...q, 
                 text: newQuestion.text,
-                evaluationCriteria: (newQuestion as any).evaluationCriteria || 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
+                evaluationCriteria: 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
               }
             : q
         ));
       }
     } catch (error) {
       console.error('Error regenerating question:', error);
+      toast.error('Ошибка перегенерации вопроса');
     } finally {
       setRegeneratingQuestion(null);
     }
@@ -285,41 +307,54 @@ const VacancyCreate: React.FC = () => {
     }
   };
 
-  // Генерация вопросов через mockApi
-  const generateQuestions = async () => {
+  // Генерация вакансии через AI
+  const generatePosition = async () => {
     setIsGenLoading(true);
     try {
-      let result;
-      if (useMock) {
-        result = await mockApi.generateQuestions({ 
-          description: form.description, 
-          questionsCount: Number(form.questionsCount) 
-        });
-      } else {
-        // TODO: подключить реальный API-клиент
-        result = await mockApi.generateQuestions({ 
-          description: form.description, 
-          questionsCount: Number(form.questionsCount) 
-        });
+      const result = await apiService.generatePosition(form.description, Number(form.questionsCount), form.questionType);
+      
+      // Обновляем форму с данными от AI
+      if (result.title) {
+        setForm(prev => ({ ...prev, title: result.title }));
+      }
+      if (result.description !== undefined) {
+        setForm(prev => ({ ...prev, description: result.description || '' }));
+      }
+      if (result.topics && result.topics.length > 0) {
+        setForm(prev => ({ ...prev, topics: result.topics }));
+      }
+      if (result.level) {
+        setForm(prev => ({ ...prev, level: result.level }));
       }
       
-      const newQuestions: Question[] = result.map((q: any) => ({
+      // Преобразуем вопросы AI в формат компонента
+      const newQuestions: Question[] = result.questions.map((q: any, index: number) => ({
         id: Math.random().toString(36).substr(2, 9),
         text: q.text,
-        evaluationCriteria: q.evaluationCriteria || 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
+        evaluationCriteria: 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
       }));
       
       setQuestions(newQuestions);
+      toast.success('Вакансия сгенерирована');
     } catch (error) {
-      console.error('Error generating questions:', error);
+      console.error('Error generating position:', error);
+      toast.error('Ошибка генерации вакансии');
     } finally {
       setIsGenLoading(false);
     }
   };
 
-  // Сабмит формы (мок)
+  // Сабмит формы
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Проверяем аутентификацию
+    if (!authService.isAuthenticated()) {
+      toast.error('Необходимо войти в систему');
+      navigate('/login');
+      return;
+    }
+    
     setIsLoading(true);
     
     try {
@@ -327,20 +362,33 @@ const VacancyCreate: React.FC = () => {
       if (!location.state?.vacancy && questions.length === 0 && form.description.trim()) {
         setIsGenLoading(true);
         try {
-          const result = await mockApi.generateQuestions({ 
-            description: form.description, 
-            questionsCount: Number(form.questionsCount) 
-          });
+          const result = await apiService.generatePosition(form.description, Number(form.questionsCount), form.questionType);
           
-          const newQuestions: Question[] = result.map((q: any) => ({
+          // Обновляем форму с данными от AI
+          if (result.title) {
+            setForm(prev => ({ ...prev, title: result.title }));
+          }
+          if (result.description !== undefined) {
+            setForm(prev => ({ ...prev, description: result.description || '' }));
+          }
+          if (result.topics && result.topics.length > 0) {
+            setForm(prev => ({ ...prev, topics: result.topics }));
+          }
+          if (result.level) {
+            setForm(prev => ({ ...prev, level: result.level }));
+          }
+          
+          // Преобразуем вопросы AI в формат компонента
+          const newQuestions: Question[] = result.questions.map((q: any, index: number) => ({
             id: Math.random().toString(36).substr(2, 9),
             text: q.text,
-            evaluationCriteria: q.evaluationCriteria || 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
+            evaluationCriteria: 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
           }));
           
           setQuestions(newQuestions);
         } catch (error) {
-          console.error('Error generating questions:', error);
+          console.error('Error generating position:', error);
+          toast.error('Ошибка генерации вакансии');
         } finally {
           setIsGenLoading(false);
         }
@@ -348,7 +396,7 @@ const VacancyCreate: React.FC = () => {
 
       if (location.state?.vacancy) {
         // Обновление существующей вакансии
-        await mockApi.updatePosition(location.state.vacancy.id, {
+        await apiService.updatePosition(location.state.vacancy.id, {
           title: form.title,
           status: form.status,
           description: form.description,
@@ -357,9 +405,8 @@ const VacancyCreate: React.FC = () => {
           language: form.language,
           showOtherLang: form.showOtherLang,
           tags: form.tags,
-          inviteNext: form.inviteNext,
           answerTime: form.answerTime,
-          level: form.level,
+          level: form.level as any,
           saveAudio: form.saveAudio,
           saveVideo: form.saveVideo,
           randomOrder: form.randomOrder,
@@ -367,9 +414,53 @@ const VacancyCreate: React.FC = () => {
           questionsCount: form.questionsCount,
           checkType: form.checkType,
         });
+        
+        // Обновляем вопросы для существующей вакансии
+        if (questions.length > 0) {
+          console.log('Updating questions for existing vacancy');
+          
+          // Сначала получаем существующие вопросы
+          try {
+            const existingQuestions = await apiService.getQuestions(location.state.vacancy.id);
+            console.log('Existing questions:', existingQuestions);
+            
+            // Удаляем старые вопросы
+            if (existingQuestions.questions && existingQuestions.questions.length > 0) {
+              for (const existingQuestion of existingQuestions.questions) {
+                try {
+                  await apiService.deleteQuestion(existingQuestion.id);
+                  console.log('Deleted question:', existingQuestion.id);
+                } catch (deleteError) {
+                  console.error('Error deleting question:', deleteError);
+                }
+              }
+            }
+            
+            // Добавляем новые вопросы
+            for (const question of questions) {
+              try {
+                await apiService.createQuestion(location.state.vacancy.id, {
+                  text: question.text,
+                  type: QuestionTypeEnum.text,
+                  order: questions.indexOf(question) + 1,
+                  isRequired: true,
+                  evaluationCriteria: question.evaluationCriteria
+                });
+                console.log('Created question:', question.text);
+              } catch (createError) {
+                console.error('Error creating question:', createError);
+              }
+            }
+          } catch (questionsError) {
+            console.error('Error updating questions:', questionsError);
+            toast.error('Ошибка обновления вопросов');
+          }
+        }
+        
+        toast.success('Вакансия обновлена');
       } else {
         // Создание новой вакансии
-        const newVacancy = await mockApi.createPosition({
+        const newVacancy = await apiService.createPosition({
           title: form.title,
           status: form.status,
           description: form.description,
@@ -378,9 +469,8 @@ const VacancyCreate: React.FC = () => {
           language: form.language,
           showOtherLang: form.showOtherLang,
           tags: form.tags,
-          inviteNext: form.inviteNext,
           answerTime: form.answerTime,
-          level: form.level,
+          level: form.level as any,
           saveAudio: form.saveAudio,
           saveVideo: form.saveVideo,
           randomOrder: form.randomOrder,
@@ -392,20 +482,22 @@ const VacancyCreate: React.FC = () => {
         // Если есть вопросы, добавляем их к вакансии
         if (questions.length > 0 && newVacancy.id) {
           for (const question of questions) {
-            await mockApi.createPositionQuestion(newVacancy.id, {
+            await apiService.createQuestion(newVacancy.id, {
               text: question.text,
-              type: 'text',
+              type: QuestionTypeEnum.text,
               order: questions.indexOf(question) + 1,
               isRequired: true,
               evaluationCriteria: question.evaluationCriteria
             });
           }
         }
+        toast.success('Вакансия создана');
       }
       
       navigate('/vacancies');
     } catch (error) {
       console.error('Error saving vacancy:', error);
+      toast.error('Ошибка сохранения вакансии');
     } finally {
       setIsLoading(false);
     }
@@ -474,7 +566,7 @@ const VacancyCreate: React.FC = () => {
               <button 
                 type="button" 
                 className="btn-primary h-10 px-6 text-base" 
-                onClick={generateQuestions} 
+                onClick={generatePosition} 
                 disabled={isGenLoading || !form.description.trim()}
               >
                 {isGenLoading ? 'Генерируем...' : 'Сгенерировать'}
@@ -577,7 +669,9 @@ const VacancyCreate: React.FC = () => {
           {/* Вопросы в карточках с drag-and-drop */}
           <div className="bg-white border border-gray-100 rounded-xl p-6 flex flex-col gap-4 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-              <h2 className="font-semibold text-gray-900 text-lg">Вопросы для интервью</h2>
+              <h2 className="font-semibold text-gray-900 text-lg">
+                Вопросы для интервью {questions.length > 0 && `(${questions.length})`}
+              </h2>
               <button 
                 type="button" 
                 className="btn-secondary px-4 py-2 text-sm flex items-center whitespace-nowrap" 

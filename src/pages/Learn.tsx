@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { apiService } from '../services/apiService';
+import toast from 'react-hot-toast';
 
 const Learn: React.FC = () => {
   const [materials, setMaterials] = useState<any[]>([]);
@@ -10,15 +9,16 @@ const Learn: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getLearnMaterials?.() || [];
-      } else {
-        // TODO: подключить реальный API-клиент
-        data = await mockApi.getLearnMaterials?.() || [];
+      try {
+        const data = await apiService.getLearnMaterials();
+        setMaterials(data);
+      } catch (error) {
+        console.error('Error loading learn materials:', error);
+        toast.error('Ошибка загрузки обучающих материалов');
+        setMaterials([]);
+      } finally {
+        setLoading(false);
       }
-      setMaterials(data);
-      setLoading(false);
     })();
   }, []);
 

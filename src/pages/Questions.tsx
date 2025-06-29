@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit, Trash2, MoveUp, MoveDown } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { apiService } from '../services/apiService';
+import { QuestionTypeEnum } from '../client/models/question-type-enum';
+import toast from 'react-hot-toast';
 
 const Questions: React.FC = () => {
   const navigate = useNavigate();
@@ -13,9 +13,14 @@ const Questions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingQuestion, setEditingQuestion] = useState<any>(null);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    text: string;
+    type: QuestionTypeEnum;
+    order: number;
+    isRequired: boolean;
+  }>({
     text: '',
-    type: 'text',
+    type: QuestionTypeEnum.text,
     order: 1,
     isRequired: false,
   });
@@ -27,13 +32,14 @@ const Questions: React.FC = () => {
     (async () => {
       try {
         const [questionsData, positionData] = await Promise.all([
-          mockApi.getQuestions(positionId),
-          mockApi.getPosition(positionId),
+          apiService.getQuestions(parseInt(positionId)),
+          apiService.getPosition(parseInt(positionId)),
         ]);
-        setQuestions(questionsData);
+        setQuestions(questionsData.questions);
         setPosition(positionData);
       } catch (error) {
         console.error('Error loading questions:', error);
+        toast.error('Ошибка загрузки вопросов');
       } finally {
         setLoading(false);
       }
@@ -45,37 +51,50 @@ const Questions: React.FC = () => {
     if (!positionId) return;
     
     try {
-      const newQuestion = await mockApi.createQuestion(positionId, {
-        ...formData,
+      const newQuestion = await apiService.createQuestion(parseInt(positionId), {
+        text: formData.text,
+        type: formData.type as QuestionTypeEnum,
         order: questions.length + 1,
+        isRequired: formData.isRequired,
       });
       setQuestions([...questions, newQuestion]);
       setShowCreateForm(false);
-      setFormData({ text: '', type: 'text', order: 1, isRequired: false });
+      setFormData({ text: '', type: QuestionTypeEnum.text, order: 1, isRequired: false });
+      toast.success('Вопрос создан');
     } catch (error) {
       console.error('Error creating question:', error);
+      toast.error('Ошибка создания вопроса');
     }
   };
 
   const handleUpdateQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const updatedQuestion = await mockApi.updateQuestion(editingQuestion.id, formData);
+      const updatedQuestion = await apiService.updateQuestion(editingQuestion.id, {
+        text: formData.text,
+        type: formData.type as QuestionTypeEnum,
+        order: formData.order,
+        isRequired: formData.isRequired,
+      });
       setQuestions(questions.map(q => q.id === editingQuestion.id ? updatedQuestion : q));
       setEditingQuestion(null);
-      setFormData({ text: '', type: 'text', order: 1, isRequired: false });
+      setFormData({ text: '', type: QuestionTypeEnum.text, order: 1, isRequired: false });
+      toast.success('Вопрос обновлен');
     } catch (error) {
       console.error('Error updating question:', error);
+      toast.error('Ошибка обновления вопроса');
     }
   };
 
   const handleDeleteQuestion = async (questionId: string) => {
     if (window.confirm('Вы уверены, что хотите удалить этот вопрос?')) {
       try {
-        await mockApi.deleteQuestion(questionId);
+        await apiService.deleteQuestion(parseInt(questionId));
         setQuestions(questions.filter(q => q.id !== questionId));
+        toast.success('Вопрос удален');
       } catch (error) {
         console.error('Error deleting question:', error);
+        toast.error('Ошибка удаления вопроса');
       }
     }
   };
@@ -84,7 +103,7 @@ const Questions: React.FC = () => {
     setEditingQuestion(question);
     setFormData({
       text: question.text,
-      type: question.type,
+      type: question.type as QuestionTypeEnum,
       order: question.order,
       isRequired: question.isRequired || false,
     });
@@ -111,10 +130,11 @@ const Questions: React.FC = () => {
     
     // Обновляем в API
     try {
-      await mockApi.updateQuestion(questionId, { order: newQuestions[currentIndex].order });
-      await mockApi.updateQuestion(newQuestions[newIndex].id, { order: newQuestions[newIndex].order });
+      await apiService.updateQuestion(parseInt(questionId), { order: newQuestions[currentIndex].order });
+      await apiService.updateQuestion(newQuestions[newIndex].id, { order: newQuestions[newIndex].order });
     } catch (error) {
       console.error('Error updating question order:', error);
+      toast.error('Ошибка обновления порядка вопросов');
     }
   };
 
@@ -176,9 +196,9 @@ const Questions: React.FC = () => {
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-sm font-medium text-gray-500">#{question.order}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          question.type === 'text' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+                          question.type === QuestionTypeEnum.text ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
                         }`}>
-                          {question.type === 'text' ? 'Текстовый' : 'Аудио'}
+                          {question.type === QuestionTypeEnum.text ? 'Текстовый' : 'Аудио'}
                         </span>
                         {question.isRequired && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -233,11 +253,11 @@ const Questions: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Тип ответа</label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as QuestionTypeEnum })}
                     className="input-field"
                   >
-                    <option value="text">Текстовый</option>
-                    <option value="audio">Аудио</option>
+                    <option value={QuestionTypeEnum.text}>Текстовый</option>
+                    <option value={QuestionTypeEnum.audio}>Аудио</option>
                   </select>
                 </div>
                 
@@ -263,7 +283,7 @@ const Questions: React.FC = () => {
                     onClick={() => {
                       setShowCreateForm(false);
                       setEditingQuestion(null);
-                      setFormData({ text: '', type: 'text', order: 1, isRequired: false });
+                      setFormData({ text: '', type: QuestionTypeEnum.text, order: 1, isRequired: false });
                     }}
                     className="btn-secondary flex-1"
                   >

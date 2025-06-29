@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Edit, Trash2, Check } from 'lucide-react';
-import { mockApi } from '../mocks/mockApi';
-
-const useMock = process.env.REACT_APP_USE_MOCK_API === 'true';
+import { apiService } from '../services/apiService';
+import toast from 'react-hot-toast';
 
 const Tariffs: React.FC = () => {
   const navigate = useNavigate();
@@ -21,54 +20,76 @@ const Tariffs: React.FC = () => {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      let data;
-      if (useMock) {
-        data = await mockApi.getTariffs();
-      } else {
-        data = await mockApi.getTariffs();
+      try {
+        const data = await apiService.getTariffs();
+        setTariffs(data);
+      } catch (error) {
+        console.error('Error loading tariffs:', error);
+        toast.error('Ошибка загрузки тарифов');
+      } finally {
+        setLoading(false);
       }
-      setTariffs(data);
-      setLoading(false);
     })();
   }, []);
 
   const handleCreateTariff = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const newTariff = await mockApi.createTariff({
-        ...formData,
-        features: formData.features.filter(f => f.trim() !== ''),
-      });
-      setTariffs([...tariffs, newTariff]);
-      setShowCreateForm(false);
-      setFormData({ name: '', features: [''], price: 0, isActive: true });
+      // Note: The API service doesn't have createTariff method yet
+      // This would need to be added to the API service
+      toast.error('Функция создания тарифов пока не реализована');
+      return;
+      
+      // const newTariff = await apiService.createTariff({
+      //   ...formData,
+      //   features: formData.features.filter(f => f.trim() !== ''),
+      // });
+      // setTariffs([...tariffs, newTariff]);
+      // setShowCreateForm(false);
+      // setFormData({ name: '', features: [''], price: 0, isActive: true });
+      // toast.success('Тариф создан');
     } catch (error) {
       console.error('Error creating tariff:', error);
+      toast.error('Ошибка создания тарифа');
     }
   };
 
   const handleUpdateTariff = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const updatedTariff = await mockApi.updateTariff(editingTariff.id, {
-        ...formData,
-        features: formData.features.filter(f => f.trim() !== ''),
-      });
-      setTariffs(tariffs.map(t => t.id === editingTariff.id ? updatedTariff : t));
-      setEditingTariff(null);
-      setFormData({ name: '', features: [''], price: 0, isActive: true });
+      // Note: The API service doesn't have updateTariff method yet
+      // This would need to be added to the API service
+      toast.error('Функция обновления тарифов пока не реализована');
+      return;
+      
+      // const updatedTariff = await apiService.updateTariff(editingTariff.id, {
+      //   ...formData,
+      //   features: formData.features.filter(f => f.trim() !== ''),
+      // });
+      // setTariffs(tariffs.map(t => t.id === editingTariff.id ? updatedTariff : t));
+      // setEditingTariff(null);
+      // setFormData({ name: '', features: [''], price: 0, isActive: true });
+      // toast.success('Тариф обновлен');
     } catch (error) {
       console.error('Error updating tariff:', error);
+      toast.error('Ошибка обновления тарифа');
     }
   };
 
   const handleDeleteTariff = async (tariffId: string) => {
     if (window.confirm('Вы уверены, что хотите удалить этот тариф?')) {
       try {
-        await mockApi.deleteTariff(tariffId);
-        setTariffs(tariffs.filter(t => t.id !== tariffId));
+        // Note: The API service doesn't have deleteTariff method yet
+        // This would need to be added to the API service
+        toast.error('Функция удаления тарифов пока не реализована');
+        return;
+        
+        // await apiService.deleteTariff(tariffId);
+        // setTariffs(tariffs.filter(t => t.id !== tariffId));
+        // toast.success('Тариф удален');
       } catch (error) {
         console.error('Error deleting tariff:', error);
+        toast.error('Ошибка удаления тарифа');
       }
     }
   };
