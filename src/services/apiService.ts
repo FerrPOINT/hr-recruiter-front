@@ -18,7 +18,7 @@ import {
   PositionStatusEnum,
   GetPositionPublicLink200Response,
   TranscribeAudio200Response,
-  TranscribeInterviewAnswer200Response,
+  TranscribeAnswerWithAI200Response,
   BaseQuestionFields,
   PositionDataGenerationRequest,
   PositionDataGenerationResponse,
@@ -638,7 +638,7 @@ class ApiService {
       console.log('Response data type:', typeof response.data);
       console.log('Response data keys:', Object.keys(response.data || {}));
       
-      const data = response.data as TranscribeInterviewAnswer200Response;
+      const data = response.data as TranscribeAnswerWithAI200Response;
       console.log('Parsed data:', data);
       console.log('Data success:', data.success);
       console.log('Data formattedText:', data.formattedText);
@@ -649,7 +649,7 @@ class ApiService {
       return {
         success: data.success || false,
         formattedText: data.formattedText || 'Текст не распознан',
-        interviewAnswerId: data.interviewAnswerId || ''
+        interviewAnswerId: String(data.interviewAnswerId || '')
       };
     } catch (error: any) {
       console.error('=== TRANSCRIBE INTERVIEW ANSWER SERVICE ERROR ===');
