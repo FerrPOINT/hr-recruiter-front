@@ -15,7 +15,6 @@ import Team from './pages/Team';
 import Branding from './pages/Branding';
 import Tariffs from './pages/Tariffs';
 import Questions from './pages/Questions';
-import AudioTest from './components/AudioTest';
 
 function App() {
   return (
@@ -34,7 +33,6 @@ function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/interview/:sessionId" element={<InterviewSession />} />
-          <Route path="/audio-test" element={<AudioTest />} />
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="vacancies" element={<VacancyList />} />
