@@ -1,0 +1,6 @@
+{
+  "features": {
+    "useMock": false,
+    "debug": true
+  }
+} 
