@@ -1,4 +1,5 @@
 import propertiesConfig from './properties.json';
+import apiProperties from './api.properties.json';
 
 // Типы для конфигурации
 interface ApiConfig {
@@ -36,7 +37,11 @@ class Properties {
    * Получить API базовый URL
    */
   getApiBaseUrl(): string {
-    return 'http://localhost:8080/api/v1';
+    const host = apiProperties.apiHost;
+    if (!host) {
+      throw new Error('apiHost is not set in src/config/api.properties.json');
+    }
+    return `http://${host}/api/v1`;
   }
 
   /**

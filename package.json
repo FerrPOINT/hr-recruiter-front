@@ -29,6 +29,9 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:env": "node scripts/start-with-env.js",
+    "start:dev": "cross-env REACT_APP_API_HOST=localhost:8080 react-scripts start",
+    "start:prod": "cross-env REACT_APP_API_HOST=api.example.com:8080 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
