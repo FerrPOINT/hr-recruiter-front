@@ -10,6 +10,7 @@ import { AnalyticsReportsApi } from './apis/analytics-reports-api';
 import { SettingsApi } from './apis/settings-api';
 import { AIApi } from './apis/aiapi';
 import { DefaultApi } from './apis/default-api';
+import { properties } from '../config/properties';
 
 export interface ApiClient {
     auth: AuthApi;
@@ -26,7 +27,7 @@ export interface ApiClient {
 }
 
 // Базовый адрес API для всех запросов
-const API_BASE_URL = 'http://localhost:8080/api/v1';
+const API_BASE_URL = properties.getApiBaseUrl();
 
 export function createApiClient(
     username?: string, 
