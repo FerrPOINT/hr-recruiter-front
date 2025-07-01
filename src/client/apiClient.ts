@@ -30,7 +30,11 @@ export function createApiClient(
     password?: string, 
     basePath?: string
 ): ApiClient {
-    const finalBasePath = basePath || (process.env.REACT_APP_API_HOST as string);
+    const apiHost = process.env.REACT_APP_RECRUITER_API_HOST as string;
+    if (!apiHost) {
+        throw new Error('REACT_APP_RECRUITER_API_HOST is not set in .env');
+    }
+    const finalBasePath = 'http://' + apiHost + '/api/v1';
     const config = new Configuration({
         username,
         password,
