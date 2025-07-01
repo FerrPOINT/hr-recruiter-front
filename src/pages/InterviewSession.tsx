@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Mic, Send, Loader2, CheckCircle, Mail, Globe, Users, Info, Headphones, Video, Briefcase, Phone } from 'lucide-react';
 import { useParams } from 'react-router-dom';
 import { apiService } from '../services/apiService';
+import { audioService } from '../services/audioService';
 // TODO: Add branding import when implementing brand styling
 // import type { Branding } from '../client/models/branding';
 import type { Position } from '../client/models/position';
@@ -19,33 +20,12 @@ const INTRO_MESSAGES = [
   { from: 'ai', text: 'Нажми кнопку «Тест микрофона», чтобы проверить микрофон.' },
 ];
 
-// --- AUDIO ENHANCEMENT CONSTANTS ---
-const AUDIO_ENHANCEMENT_CONFIG = {
-  // Настройки усиления микрофона
-  gain: {
-    value: 2.0, // Усиление в 2 раза
-    minValue: 1.0,
-    maxValue: 5.0
-  },
-  // Настройки компрессии
-  compression: {
-    threshold: -24, // dB
-    ratio: 4, // 4:1
-    attack: 0.003, // 3ms
-    release: 0.25 // 250ms
-  },
-  // Настройки фильтрации
-  filtering: {
-    lowPass: 8000, // Hz - убираем высокие частоты
-    highPass: 80,  // Hz - убираем низкие частоты
-    notch: 50      // Hz - убираем сетевые помехи
-  },
-  // Настройки шумоподавления
-  noiseReduction: {
-    enabled: true,
-    sensitivity: 0.1, // Чувствительность к шуму
-    smoothing: 0.8    // Сглаживание
-  }
+// --- AUDIO RECORDING CONSTANTS ---
+const AUDIO_RECORDING_CONFIG = {
+  quality: 'high' as const,
+  format: 'webm' as const,
+  sampleRate: 48000,
+  channels: 1
 };
 
 const icons = [<Globe className="h-6 w-6 text-orange-500" />, <Headphones className="h-6 w-6 text-orange-500" />, <Mic className="h-4 w-4 text-orange-500" />, <Info className="h-6 w-6 text-orange-500" />];
@@ -81,25 +61,8 @@ const InterviewSession: React.FC = () => {
   // Audio recording states
   const [audioLevel, setAudioLevel] = useState<number>(0);
   const [isAudioSupported, setIsAudioSupported] = useState<boolean>(true);
-  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
-  const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [currentMimeType, setCurrentMimeType] = useState<string>('audio/mp3');
   const [micTestResult, setMicTestResult] = useState<'pending' | 'success' | 'failed'>('pending');
   const [micTestTries, setMicTestTries] = useState(0);
-
-  // Audio enhancement states
-  const [gainNode, setGainNode] = useState<GainNode | null>(null);
-  const [compressorNode, setCompressorNode] = useState<DynamicsCompressorNode | null>(null);
-  const [lowPassFilter, setLowPassFilter] = useState<BiquadFilterNode | null>(null);
-  const [highPassFilter, setHighPassFilter] = useState<BiquadFilterNode | null>(null);
-  const [notchFilter, setNotchFilter] = useState<BiquadFilterNode | null>(null);
-  const [audioEnhancementEnabled, setAudioEnhancementEnabled] = useState<boolean>(true);
-  const [currentGainValue, setCurrentGainValue] = useState<number>(AUDIO_ENHANCEMENT_CONFIG.gain.value);
-  const [audioQuality, setAudioQuality] = useState<'poor' | 'good' | 'excellent'>('good');
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -352,502 +315,82 @@ const InterviewSession: React.FC = () => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Audio recording functions
-  const initializeAudio = async (): Promise<MediaRecorder | null> => {
-    try {
-      console.log('Initializing enhanced audio with microphone amplification...');
-      
-      // Проверяем поддержку getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('getUserMedia not supported');
-      }
-      
-      // Улучшенные настройки микрофона для лучшей транскрибации
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          // Дополнительные настройки для лучшего качества
-          sampleRate: 48000, // Высокая частота дискретизации
-          channelCount: 1,   // Моно для лучшей транскрибации
-          // Расширенные настройки (поддерживаются не всеми браузерами)
-          ...(navigator.mediaDevices.getSupportedConstraints().sampleRate && {
-            sampleRate: { ideal: 48000, min: 44100 }
-          })
-        } 
-      });
-      
-      console.log('Enhanced audio stream obtained');
-      setAudioStream(stream);
-      
-      // Создаем AudioContext с высокой частотой дискретизации
-      const context = new (window.AudioContext || (window as any).webkitAudioContext)({
-        sampleRate: 48000,
-        latencyHint: 'interactive'
-      });
-      
-      // Создаем источник из MediaStream
-      const source = context.createMediaStreamSource(stream);
-      
-      // Создаем цепочку аудио обработки для усиления
-      let currentNode: AudioNode = source;
-      
-      // 1. High-pass фильтр (убираем низкие частоты)
-      if (AUDIO_ENHANCEMENT_CONFIG.filtering.highPass > 0) {
-        const highPass = context.createBiquadFilter();
-        highPass.type = 'highpass';
-        highPass.frequency.value = AUDIO_ENHANCEMENT_CONFIG.filtering.highPass;
-        highPass.Q.value = 1.0;
-        currentNode.connect(highPass);
-        setHighPassFilter(highPass);
-        currentNode = highPass;
-        console.log('High-pass filter added:', AUDIO_ENHANCEMENT_CONFIG.filtering.highPass, 'Hz');
-      }
-      
-      // 2. Notch фильтр (убираем сетевые помехи 50Hz)
-      if (AUDIO_ENHANCEMENT_CONFIG.filtering.notch > 0) {
-        const notch = context.createBiquadFilter();
-        notch.type = 'notch';
-        notch.frequency.value = AUDIO_ENHANCEMENT_CONFIG.filtering.notch;
-        notch.Q.value = 10.0;
-        currentNode.connect(notch);
-        setNotchFilter(notch);
-        currentNode = notch;
-        console.log('Notch filter added:', AUDIO_ENHANCEMENT_CONFIG.filtering.notch, 'Hz');
-      }
-      
-      // 3. Компрессор (улучшает динамический диапазон)
-      if (AUDIO_ENHANCEMENT_CONFIG.compression) {
-        const compressor = context.createDynamicsCompressor();
-        compressor.threshold.value = AUDIO_ENHANCEMENT_CONFIG.compression.threshold;
-        compressor.ratio.value = AUDIO_ENHANCEMENT_CONFIG.compression.ratio;
-        compressor.attack.value = AUDIO_ENHANCEMENT_CONFIG.compression.attack;
-        compressor.release.value = AUDIO_ENHANCEMENT_CONFIG.compression.release;
-        compressor.knee.value = 30;
-        currentNode.connect(compressor);
-        setCompressorNode(compressor);
-        currentNode = compressor;
-        console.log('Compressor added with ratio:', AUDIO_ENHANCEMENT_CONFIG.compression.ratio);
-      }
-      
-      // 4. Gain node (усиление микрофона)
-      const gain = context.createGain();
-      gain.gain.value = currentGainValue;
-      currentNode.connect(gain);
-      setGainNode(gain);
-      currentNode = gain;
-      console.log('Gain node added with value:', currentGainValue);
-      
-      // 5. Low-pass фильтр (убираем высокие частоты)
-      if (AUDIO_ENHANCEMENT_CONFIG.filtering.lowPass > 0) {
-        const lowPass = context.createBiquadFilter();
-        lowPass.type = 'lowpass';
-        lowPass.frequency.value = AUDIO_ENHANCEMENT_CONFIG.filtering.lowPass;
-        lowPass.Q.value = 1.0;
-        currentNode.connect(lowPass);
-        setLowPassFilter(lowPass);
-        currentNode = lowPass;
-        console.log('Low-pass filter added:', AUDIO_ENHANCEMENT_CONFIG.filtering.lowPass, 'Hz');
-      }
-      
-      // 6. Анализатор для визуализации
-      const analyserNode = context.createAnalyser();
-      analyserNode.fftSize = 512; // Увеличиваем для лучшего разрешения
-      analyserNode.smoothingTimeConstant = 0.8;
-      analyserNode.minDecibels = -90;
-      analyserNode.maxDecibels = -10;
-      currentNode.connect(analyserNode);
-      
-      setAudioContext(context);
-      setAnalyser(analyserNode);
-      
-      // Создаем MediaStreamDestination для записи обработанного аудио
-      const destination = context.createMediaStreamDestination();
-      analyserNode.connect(destination);
-      
-      // Проверяем поддержку кодеков - приоритет высокому качеству
-      const supportedMimeTypes = [
-        'audio/webm;codecs=opus', // Лучший кодек для речи
-        'audio/ogg;codecs=opus',  // Альтернатива
-        'audio/webm',             // Fallback
-        'audio/mp4',              // Универсальный
-        'audio/wav'               // Без сжатия
-      ];
-      
-      let mimeType = null;
-      for (const type of supportedMimeTypes) {
-        if (MediaRecorder.isTypeSupported(type)) {
-          mimeType = type;
-          console.log('Using supported MIME type for enhanced recording:', type);
-          break;
-        }
-      }
-      
-      let recorder: MediaRecorder;
-      
-      if (mimeType) {
-        // Используем обработанный аудио поток
-        recorder = new MediaRecorder(destination.stream, { mimeType });
-        console.log('Using enhanced MediaRecorder with MIME type:', mimeType);
-        setCurrentMimeType(mimeType);
-      } else {
-        console.warn('No supported MIME types found, using default');
-        recorder = new MediaRecorder(destination.stream);
-        console.log('Using default MediaRecorder settings');
-        setCurrentMimeType('audio/webm');
-      }
-      
-      // Настраиваем обработчики событий
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          console.log('Enhanced data available, size:', event.data.size);
-          setRecordedChunks(prev => [...prev, event.data]);
-        }
-      };
-      
-      recorder.onstop = () => {
-        console.log('=== ENHANCED MEDIA RECORDER ONSTOP ===');
-        console.log('Recorded chunks count:', recordedChunks.length);
-        const blob = new Blob(recordedChunks, { type: currentMimeType });
-        console.log('Created enhanced audio blob, size:', blob.size, 'bytes, type:', currentMimeType);
-        setAudioBlob(blob);
-        setRecordedChunks([]);
-      };
-      
-      setMediaRecorder(recorder);
-      console.log('Enhanced audio initialization completed successfully');
-      return recorder;
-    } catch (error) {
-      console.error('Error initializing enhanced audio:', error);
-      setIsAudioSupported(false);
-      toast.error('Не удалось получить доступ к микрофону с усилением');
-      return null;
-    }
-  };
-
+  // Audio recording functions using universal AudioService
   const startAudioRecording = async (isMicTest = false) => {
     console.log('=== START AUDIO RECORDING ===');
     console.log('isMicTest:', isMicTest);
-    console.log('Current recordTimer:', recordTimer);
     
-    // Проверяем поддержку MediaRecorder
-    if (!window.MediaRecorder) {
-      console.error('MediaRecorder not supported');
-      toast.error('Ваш браузер не поддерживает запись аудио');
-      return;
-    }
-    
-    let currentRecorder = mediaRecorder;
-    
-    // Проверяем, нужно ли создать новый MediaRecorder
-    if (!currentRecorder || currentRecorder.state === 'inactive') {
-      console.log('Creating new MediaRecorder...');
-      currentRecorder = await initializeAudio();
-      if (!currentRecorder) {
-        console.log('Failed to initialize audio');
-        return;
-      }
-      // Ждем немного для инициализации
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    if (currentRecorder && currentRecorder.state === 'inactive') {
-      console.log('Starting mediaRecorder...');
-      setRecordedChunks([]);
-      setAudioBlob(null);
-      currentRecorder.start();
+    try {
+      // Настраиваем обработчики
+      audioService.setLevelChangeHandler((level) => {
+        setAudioLevel(level);
+      });
+      
+      // Начинаем запись
+      const duration = isMicTest ? MIC_TEST_DURATION : (interviewSettings?.answerTime || 60);
+      await audioService.startRecording({
+        ...AUDIO_RECORDING_CONFIG,
+        duration
+      });
+      
       setIsRecording(true);
+      setRecordTimer(duration);
       
-      // Устанавливаем таймер только для обычной записи ответов, НЕ для теста микрофона
-      if (!isMicTest && recordTimer === 0) {
-        const answerTime = interviewSettings?.answerTime || 60;
-        console.log('Setting record timer to:', answerTime, 'seconds (for regular answer recording)');
-        setRecordTimer(answerTime);
-      } else if (isMicTest) {
-        console.log('Mic test mode - using existing timer value:', recordTimer, 'seconds');
-      } else {
-        console.log('Regular recording mode - using existing timer value:', recordTimer, 'seconds');
-      }
-      
-      // Запускаем анализ уровня звука
-      const audioLevelInterval = setInterval(() => {
-        analyzeAudioLevel();
-        // Автоматически настраиваем усиление каждые 2 секунды
-        if (audioEnhancementEnabled) {
-          adjustGainDynamically(50);
-        }
-      }, 100);
-      
-      // Сохраняем интервал для очистки
-      (window as any).audioLevelInterval = audioLevelInterval;
-    } else {
-      console.log('MediaRecorder not ready or already recording, state:', currentRecorder?.state);
-    }
-
-    // Для микротеста используем локальный массив
-    if (isMicTest) {
-      const w = window as any;
-      w._micTestChunks = [];
-      console.log('Initialized mic test chunks array');
-      
-      if (currentRecorder) {
-        currentRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            w._micTestChunks.push(event.data);
-            console.log('Mic test chunk added, size:', event.data.size, 'total chunks:', w._micTestChunks.length);
-          }
-        };
-        
-        // Принудительно запрашиваем данные каждую секунду для теста микрофона
-        const dataInterval = setInterval(() => {
-          if (currentRecorder && currentRecorder.state === 'recording') {
-            currentRecorder.requestData();
-          } else {
-            clearInterval(dataInterval);
-          }
-        }, 1000);
-        
-        // Сохраняем интервал для очистки
-        (window as any).micTestDataInterval = dataInterval;
-      }
-    } else {
-      // Для обычной записи также используем принудительный запрос данных
-      const w = window as any;
-      w._regularRecordingChunks = [];
-      console.log('Initialized regular recording chunks array');
-      
-      if (currentRecorder) {
-        currentRecorder.ondataavailable = (event) => {
-          if (event.data.size > 0) {
-            w._regularRecordingChunks.push(event.data);
-            console.log('Regular recording chunk added, size:', event.data.size, 'total chunks:', w._regularRecordingChunks.length);
-          }
-        };
-        
-        // Принудительно запрашиваем данные каждую секунду для обычной записи
-        const dataInterval = setInterval(() => {
-          if (currentRecorder && currentRecorder.state === 'recording') {
-            currentRecorder.requestData();
-          } else {
-            clearInterval(dataInterval);
-          }
-        }, 1000);
-        
-        // Сохраняем интервал для очистки
-        (window as any).regularRecordingDataInterval = dataInterval;
-      }
+      console.log('Audio recording started successfully');
+    } catch (error) {
+      console.error('Error starting audio recording:', error);
+      toast.error('Не удалось начать запись аудио');
+      setIsAudioSupported(false);
     }
   };
 
-  const stopAudioRecording = async (isMicTest = false) => {
+  const stopAudioRecording = async (isMicTest = false): Promise<Blob | null> => {
     console.log('=== STOP AUDIO RECORDING ===');
     console.log('isMicTest:', isMicTest);
     
-    // Останавливаем анализ уровня звука
-    if ((window as any).audioLevelInterval) {
-      clearInterval((window as any).audioLevelInterval);
-      (window as any).audioLevelInterval = null;
-      console.log('Audio level analysis stopped');
-    }
-    
-    // Останавливаем интервал запроса данных для теста микрофона
-    if (isMicTest && (window as any).micTestDataInterval) {
-      clearInterval((window as any).micTestDataInterval);
-      (window as any).micTestDataInterval = null;
-      console.log('Mic test data interval stopped');
-    }
-    
-    // Останавливаем интервал запроса данных для обычной записи
-    if (!isMicTest && (window as any).regularRecordingDataInterval) {
-      clearInterval((window as any).regularRecordingDataInterval);
-      (window as any).regularRecordingDataInterval = null;
-      console.log('Regular recording data interval stopped');
-    }
-    
-    // Получаем актуальный mediaRecorder из состояния
-    const currentRecorder = mediaRecorder;
-    console.log('Current recorder state:', currentRecorder?.state);
-    
-    if (!currentRecorder || currentRecorder.state !== 'recording') {
-      console.log('MediaRecorder not recording, state:', currentRecorder?.state);
+    try {
+      const audioBlob = await audioService.stopRecording();
+      setIsRecording(false);
+      setRecordTimer(0);
+      setAudioLevel(0);
+      
+      console.log('Audio recording stopped, blob size:', audioBlob.size);
+      return audioBlob;
+    } catch (error) {
+      console.error('Error stopping audio recording:', error);
+      toast.error('Ошибка при остановке записи');
+      setIsRecording(false);
+      setRecordTimer(0);
       return null;
     }
-    
-    if (isMicTest) {
-      // Для теста микрофона используем Promise
-      console.log('Stopping mic test recording...');
-      return new Promise<Blob>((resolve) => {
-        const w = window as any;
-        const micTestChunks = w._micTestChunks || [];
-        console.log('Mic test chunks count:', micTestChunks.length);
-        
-        currentRecorder.onstop = () => {
-          console.log('Mic test onstop triggered');
-          // Используем сохраненный MIME тип
-          const blob = new Blob(micTestChunks, { type: currentMimeType });
-          console.log('Created mic test blob, size:', blob.size, 'bytes, type:', currentMimeType);
-          setIsRecording(false);
-          setRecordTimer(0);
-          resolve(blob);
-        };
-        
-        currentRecorder.stop();
-      });
-    } else {
-      // Для обычной записи
-      console.log('Stopping regular recording...');
-      return new Promise<Blob>((resolve) => {
-        const w = window as any;
-        const regularRecordingChunks = w._regularRecordingChunks || [];
-        console.log('Regular recording chunks count:', regularRecordingChunks.length);
-        
-        currentRecorder.onstop = () => {
-          console.log('Regular recording onstop triggered');
-          // Используем сохраненный MIME тип
-          const blob = new Blob(regularRecordingChunks, { type: currentMimeType });
-          console.log('Created regular recording blob, size:', blob.size, 'bytes, type:', currentMimeType);
-          setIsRecording(false);
-          setRecordTimer(0);
-          resolve(blob);
-        };
-        
-        currentRecorder.stop();
-      });
-    }
   };
 
-  // Улучшенный анализ уровня звука с динамическим усилением
-  const analyzeAudioLevel = () => {
-    if (!analyser) return;
-    
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-    analyser.getByteFrequencyData(dataArray);
-    
-    // Улучшенный алгоритм анализа уровня звука
-    let sum = 0;
-    let count = 0;
-    
-    // Фокусируемся на речевых частотах (80Hz - 8000Hz)
-    const speechFrequencies = dataArray.slice(2, Math.floor(dataArray.length * 0.8));
-    
-    for (let i = 0; i < speechFrequencies.length; i++) {
-      if (speechFrequencies[i] > 0) {
-        sum += speechFrequencies[i];
-        count++;
-      }
-    }
-    
-    const average = count > 0 ? sum / count : 0;
-    
-    // Применяем логарифмическую шкалу для более естественного отображения
-    const normalizedLevel = Math.min(100, Math.pow(average / 255, 0.5) * 100 * 3);
-    
-    // Динамическое усиление на основе текущего уровня
-    let enhancedLevel = normalizedLevel;
-    if (normalizedLevel < 20) {
-      // Усиливаем тихие звуки
-      enhancedLevel = normalizedLevel * 2;
-    } else if (normalizedLevel > 80) {
-      // Сглаживаем громкие звуки
-      enhancedLevel = 80 + (normalizedLevel - 80) * 0.5;
-    }
-    
-    setAudioLevel(enhancedLevel);
-    
-    // Автоматически настраиваем качество аудио
-    if (enhancedLevel < 10) {
-      setAudioQuality('poor');
-    } else if (enhancedLevel < 30) {
-      setAudioQuality('good');
-    } else {
-      setAudioQuality('excellent');
-    }
-  };
 
-  // Функция для динамического усиления микрофона
-  const adjustGainDynamically = (targetLevel: number = 50) => {
-    if (!gainNode) return;
-    
-    const currentLevel = audioLevel;
-    let newGain = currentGainValue;
-    
-    if (currentLevel < targetLevel * 0.5) {
-      // Слишком тихо - увеличиваем усиление
-      newGain = Math.min(AUDIO_ENHANCEMENT_CONFIG.gain.maxValue, currentGainValue * 1.2);
-    } else if (currentLevel > targetLevel * 1.5) {
-      // Слишком громко - уменьшаем усиление
-      newGain = Math.max(AUDIO_ENHANCEMENT_CONFIG.gain.minValue, currentGainValue * 0.8);
-    }
-    
-    if (newGain !== currentGainValue) {
-      gainNode.gain.setValueAtTime(newGain, audioContext?.currentTime || 0);
-      setCurrentGainValue(newGain);
-      console.log('Dynamic gain adjustment:', currentGainValue, '->', newGain);
-    }
-  };
 
   // Простая транскрибация для тестирования микрофона
   const transcribeAudio = async (audioBlob: Blob): Promise<string> => {
     console.log('=== TRANSCRIBE AUDIO START ===');
     console.log('Audio blob size:', audioBlob.size, 'bytes');
-    console.log('Audio blob type:', audioBlob.type);
     
-    // Дополнительная проверка качества
     if (audioBlob.size === 0) {
       console.error('Audio blob is empty');
       return 'Аудио файл пуст';
     }
     
-    if (audioBlob.size < 1024) { // Меньше 1KB
-      console.warn('Audio blob is very small, might be silent');
-    }
-    
     try {
       setIsTranscribing(true);
+      const result = await audioService.transcribeAudio(audioBlob);
       
-      // Определяем расширение файла на основе MIME типа
-      const getFileExtension = (mimeType: string) => {
-        if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
-        if (mimeType.includes('wav')) return 'wav';
-        if (mimeType.includes('ogg')) return 'ogg';
-        if (mimeType.includes('webm')) return 'webm';
-        return 'mp3'; // fallback
-      };
-      
-      const fileExtension = getFileExtension(audioBlob.type);
-      const fileName = `recording.${fileExtension}`;
-      
-      // Конвертируем Blob в File для API
-      const audioFile = new File([audioBlob], fileName, { type: audioBlob.type });
-      console.log('Created audio file:', audioFile.name, audioFile.size, 'bytes, type:', audioFile.type);
-      
-      // Проверяем, что файл создался корректно
-      if (audioFile.size !== audioBlob.size) {
-        console.error('File size mismatch:', audioFile.size, 'vs', audioBlob.size);
+      if (result.success) {
+        console.log('Transcription successful:', result.transcript);
+        return result.transcript;
+      } else {
+        console.error('Transcription failed:', result.error);
+        toast.error('Ошибка транскрибации аудио');
+        return 'Ошибка распознавания речи';
       }
-      
-      console.log('Calling apiService.transcribeAudio...');
-      const response = await apiService.transcribeAudio(audioFile);
-      console.log('Transcription response:', response);
-      
-      // Используем тот же формат ответа, что и для интервью
-      const transcript = response.transcript || 'Текст не распознан';
-      console.log('Final transcript:', transcript);
-      console.log('=== TRANSCRIBE AUDIO END ===');
-      
-      return transcript;
-    } catch (error: any) {
-      console.error('=== TRANSCRIBE AUDIO ERROR ===');
+    } catch (error) {
       console.error('Error transcribing audio:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
-      }
-      
       toast.error('Ошибка транскрибации аудио');
       return 'Ошибка распознавания речи';
     } finally {
@@ -861,78 +404,35 @@ const InterviewSession: React.FC = () => {
     console.log('Audio blob size:', audioBlob.size, 'bytes');
     console.log('Question index:', questionIndex);
     
-    // Дополнительная проверка качества
     if (audioBlob.size === 0) {
       console.error('Audio blob is empty');
       return 'Аудио файл пуст';
     }
     
-    if (audioBlob.size < 1024) { // Меньше 1KB
-      console.warn('Audio blob is very small, might be silent');
-    }
-    
     try {
       setIsTranscribing(true);
-      
-      // Определяем расширение файла на основе MIME типа
-      const getFileExtension = (mimeType: string) => {
-        if (mimeType.includes('mp3') || mimeType.includes('mpeg')) return 'mp3';
-        if (mimeType.includes('wav')) return 'wav';
-        if (mimeType.includes('ogg')) return 'ogg';
-        if (mimeType.includes('webm')) return 'webm';
-        return 'mp3'; // fallback
-      };
-      
-      const fileExtension = getFileExtension(audioBlob.type);
-      const fileName = `recording.${fileExtension}`;
-      
-      // Конвертируем Blob в File для API
-      const audioFile = new File([audioBlob], fileName, { type: audioBlob.type });
-      console.log('Created audio file:', audioFile.name, audioFile.size, 'bytes, type:', audioFile.type);
-      
-      // Проверяем, что файл создался корректно
-      if (audioFile.size !== audioBlob.size) {
-        console.error('File size mismatch:', audioFile.size, 'vs', audioBlob.size);
-      }
       
       // Получаем ID интервью и вопроса
       const interviewId = parseInt(params.sessionId || '0');
       const questionId = questions[questionIndex]?.id || 0;
       
-      console.log('Interview ID:', interviewId, 'Question ID:', questionId);
-      
       if (!interviewId || !questionId) {
         throw new Error('Missing interview ID or question ID');
       }
       
-      console.log('Calling apiService.transcribeInterviewAnswer...');
-      const response = await apiService.transcribeInterviewAnswer(audioFile, interviewId, questionId);
-      console.log('Interview answer transcription response:', response);
+      const result = await audioService.transcribeInterviewAnswer(audioBlob, interviewId, questionId);
       
-      // Сохраняем ID ответа
-      setInterviewAnswerIds(prev => {
-        const newIds = [...prev];
-        newIds[questionIndex] = response.interviewAnswerId;
-        return newIds;
-      });
-      
-      const transcript = response.formattedText || 'Текст не распознан';
-      console.log('Final formatted transcript:', transcript);
-      console.log('=== TRANSCRIBE INTERVIEW ANSWER END ===');
-      
-      return transcript;
-    } catch (error: any) {
-      console.error('=== TRANSCRIBE INTERVIEW ANSWER ERROR ===');
-      console.error('Error transcribing interview answer:', error);
-      console.error('Error message:', error.message);
-      console.error('Error stack:', error.stack);
-      
-      if (error.response) {
-        console.error('Response status:', error.response.status);
-        console.error('Response data:', error.response.data);
+      if (result.success) {
+        console.log('Interview answer transcription successful:', result.transcript);
+        return result.transcript;
+      } else {
+        console.error('Interview answer transcription failed:', result.error);
+        toast.error('Ошибка транскрибации ответа');
+        return 'Ошибка распознавания речи';
       }
-      
-      toast.error('Ошибка обработки ответа');
+    } catch (error) {
+      console.error('Error transcribing interview answer:', error);
+      toast.error('Ошибка транскрибации ответа');
       return 'Ошибка распознавания речи';
     } finally {
       setIsTranscribing(false);
@@ -963,7 +463,7 @@ const InterviewSession: React.FC = () => {
           resolve({ hasSound: true, quality: 'good' });
         }
         
-        console.log(`Audio quality check: ${sizeInKB.toFixed(1)}KB, ${durationInSeconds.toFixed(1)}s, gain: ${currentGainValue}x`);
+        console.log(`Audio quality check: ${sizeInKB.toFixed(1)}KB, ${durationInSeconds.toFixed(1)}s`);
       };
       
       audio.onerror = () => {
@@ -977,93 +477,17 @@ const InterviewSession: React.FC = () => {
 
   // Функция для очистки аудио ресурсов
   const cleanupAudioResources = () => {
-    console.log('=== CLEANUP ENHANCED AUDIO RESOURCES ===');
+    console.log('=== CLEANUP AUDIO RESOURCES ===');
     
-    // Останавливаем интервалы
-    if ((window as any).audioLevelInterval) {
-      clearInterval((window as any).audioLevelInterval);
-      (window as any).audioLevelInterval = null;
-      console.log('Audio level interval cleared');
+    try {
+      audioService.cleanup();
+      setIsRecording(false);
+      setRecordTimer(0);
+      setAudioLevel(0);
+      console.log('Audio resources cleanup completed');
+    } catch (error) {
+      console.error('Error during audio cleanup:', error);
     }
-    
-    if ((window as any).micTestDataInterval) {
-      clearInterval((window as any).micTestDataInterval);
-      (window as any).micTestDataInterval = null;
-      console.log('Mic test data interval cleared');
-    }
-    
-    if ((window as any).regularRecordingDataInterval) {
-      clearInterval((window as any).regularRecordingDataInterval);
-      (window as any).regularRecordingDataInterval = null;
-      console.log('Regular recording data interval cleared');
-    }
-    
-    // Останавливаем MediaRecorder если он записывает
-    if (mediaRecorder && mediaRecorder.state === 'recording') {
-      console.log('Stopping active MediaRecorder');
-      mediaRecorder.stop();
-    }
-    
-    // Отключаем все аудио узлы
-    if (gainNode) {
-      gainNode.disconnect();
-      console.log('Gain node disconnected');
-    }
-    
-    if (compressorNode) {
-      compressorNode.disconnect();
-      console.log('Compressor node disconnected');
-    }
-    
-    if (lowPassFilter) {
-      lowPassFilter.disconnect();
-      console.log('Low-pass filter disconnected');
-    }
-    
-    if (highPassFilter) {
-      highPassFilter.disconnect();
-      console.log('High-pass filter disconnected');
-    }
-    
-    if (notchFilter) {
-      notchFilter.disconnect();
-      console.log('Notch filter disconnected');
-    }
-    
-    // Закрываем AudioContext
-    if (audioContext && audioContext.state !== 'closed') {
-      console.log('Closing AudioContext');
-      audioContext.close();
-    }
-    
-    // Останавливаем все треки в MediaStream
-    if (audioStream) {
-      console.log('Stopping all audio tracks');
-      audioStream.getTracks().forEach(track => {
-        track.stop();
-        console.log('Audio track stopped:', track.kind);
-      });
-    }
-    
-    // Очищаем состояния
-    setMediaRecorder(null);
-    setAudioContext(null);
-    setAnalyser(null);
-    setAudioStream(null);
-    setGainNode(null);
-    setCompressorNode(null);
-    setLowPassFilter(null);
-    setHighPassFilter(null);
-    setNotchFilter(null);
-    setRecordedChunks([]);
-    setAudioBlob(null);
-    setIsRecording(false);
-    setRecordTimer(0);
-    setAudioLevel(0);
-    setCurrentGainValue(AUDIO_ENHANCEMENT_CONFIG.gain.value);
-    setAudioQuality('good');
-    
-    console.log('Enhanced audio resources cleanup completed');
   };
 
   // Очистка ресурсов при размонтировании компонента
