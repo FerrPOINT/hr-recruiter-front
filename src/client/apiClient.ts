@@ -10,7 +10,6 @@ import { AnalyticsReportsApi } from './apis/analytics-reports-api';
 import { SettingsApi } from './apis/settings-api';
 import { AIApi } from './apis/aiapi';
 import { DefaultApi } from './apis/default-api';
-import { properties } from '../config/properties';
 
 export interface ApiClient {
     auth: AuthApi;
@@ -31,7 +30,7 @@ export function createApiClient(
     password?: string, 
     basePath?: string
 ): ApiClient {
-    const finalBasePath = basePath || properties.getApiBaseUrl();
+    const finalBasePath = basePath || (process.env.REACT_APP_API_HOST as string);
     const config = new Configuration({
         username,
         password,
