@@ -26,15 +26,12 @@ export interface ApiClient {
     default: DefaultApi;
 }
 
-// Базовый адрес API для всех запросов
-const API_BASE_URL = properties.getApiBaseUrl();
-
 export function createApiClient(
     username?: string, 
     password?: string, 
     basePath?: string
 ): ApiClient {
-    const finalBasePath = basePath || API_BASE_URL;
+    const finalBasePath = basePath || properties.getApiBaseUrl();
     const config = new Configuration({
         username,
         password,

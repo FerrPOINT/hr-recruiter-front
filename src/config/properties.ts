@@ -1,5 +1,4 @@
 import propertiesConfig from './properties.json';
-import apiProperties from './api.properties.json';
 
 // Типы для конфигурации
 interface ApiConfig {
@@ -37,11 +36,11 @@ class Properties {
    * Получить API базовый URL
    */
   getApiBaseUrl(): string {
-    const host = apiProperties.apiHost;
-    if (!host) {
-      throw new Error('apiHost is not set in src/config/api.properties.json');
+    const host = process.env.REACT_APP_API_HOST;
+    if (host) {
+      return `http://${host}/api/v1`;
     }
-    return `http://${host}/api/v1`;
+    throw new Error('REACT_APP_API_HOST is not set in .env');
   }
 
   /**
