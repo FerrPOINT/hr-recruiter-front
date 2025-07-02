@@ -55,7 +55,7 @@ export class AudioService {
   }> {
     try {
       const browserService = this.getBrowserService();
-      return browserService.checkSupport();
+      return await browserService.checkSupport();
     } catch (error) {
       console.error('❌ AudioService: Failed to check support:', error);
       return {

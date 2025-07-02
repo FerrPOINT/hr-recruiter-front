@@ -31,14 +31,28 @@ export class BrowserAudioService {
   /**
    * Проверяет поддержку аудио в браузере
    */
-  checkSupport(): {
+  async checkSupport(): Promise<{
     isBrowser: boolean;
     getUserMedia: boolean;
     mediaRecorder: boolean;
     audioContext: boolean;
     supportedFormats: string[];
-  } {
+  }> {
     console.log('🎵 BrowserAudioService: checkSupport called');
+    
+    // Детальная диагностика navigator.mediaDevices
+    console.log('🎵 BrowserAudioService: navigator.mediaDevices exists:', !!navigator.mediaDevices);
+    if (navigator.mediaDevices) {
+      console.log('🎵 BrowserAudioService: navigator.mediaDevices.getUserMedia exists:', !!navigator.mediaDevices.getUserMedia);
+      console.log('🎵 BrowserAudioService: navigator.mediaDevices.enumerateDevices exists:', !!navigator.mediaDevices.enumerateDevices);
+      console.log('🎵 BrowserAudioService: navigator.mediaDevices keys:', Object.keys(navigator.mediaDevices));
+    }
+    
+    // Проверяем протокол
+    console.log('🎵 BrowserAudioService: Current protocol:', window.location.protocol);
+    console.log('🎵 BrowserAudioService: Is HTTPS:', window.location.protocol === 'https:');
+    console.log('🎵 BrowserAudioService: Is localhost:', window.location.hostname === 'localhost');
+    console.log('🎵 BrowserAudioService: Is 127.0.0.1:', window.location.hostname === '127.0.0.1');
     
     const getUserMediaSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const mediaRecorderSupported = !!window.MediaRecorder;
@@ -73,6 +87,23 @@ export class BrowserAudioService {
     };
     
     console.log('🎵 BrowserAudioService: checkSupport result:', result);
+    
+    // Попробуем принудительно запросить разрешение, чтобы увидеть ошибку
+    if (getUserMediaSupported) {
+      console.log('🎵 BrowserAudioService: Testing getUserMedia permission...');
+      try {
+        const testStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        console.log('🎵 BrowserAudioService: getUserMedia test successful!');
+        testStream.getTracks().forEach(track => track.stop());
+      } catch (error) {
+        console.error('🎵 BrowserAudioService: getUserMedia test failed:', error);
+        if (error instanceof Error) {
+          console.error('🎵 BrowserAudioService: Error name:', error.name);
+          console.error('🎵 BrowserAudioService: Error message:', error.message);
+        }
+      }
+    }
+    
     return result;
   }
 
