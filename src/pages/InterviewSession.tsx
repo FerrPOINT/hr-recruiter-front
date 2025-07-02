@@ -146,17 +146,29 @@ const InterviewSession: React.FC = () => {
   useEffect(() => {
     const checkAudioSupport = async () => {
       try {
+        console.log('🎵 InterviewSession: Starting audio support check...');
         const support = await audioService.checkSupport();
-        console.log('Audio support check:', support);
+        console.log('🎵 InterviewSession: Audio support check result:', support);
+        
+        console.log('🎵 InterviewSession: Checking individual APIs:');
+        console.log('  - isBrowser:', support.isBrowser);
+        console.log('  - getUserMedia:', support.getUserMedia);
+        console.log('  - mediaRecorder:', support.mediaRecorder);
+        console.log('  - audioContext:', support.audioContext);
+        console.log('  - supportedFormats count:', support.supportedFormats.length);
         
         if (!support.isBrowser || !support.getUserMedia || !support.mediaRecorder) {
-          console.warn('Audio APIs not supported in this environment');
+          console.warn('🎵 InterviewSession: Audio APIs not supported in this environment');
+          console.warn('  - isBrowser missing:', !support.isBrowser);
+          console.warn('  - getUserMedia missing:', !support.getUserMedia);
+          console.warn('  - mediaRecorder missing:', !support.mediaRecorder);
           setIsAudioSupported(false);
         } else {
+          console.log('🎵 InterviewSession: All required audio APIs are supported');
           setIsAudioSupported(true);
         }
       } catch (error) {
-        console.error('Error checking audio support:', error);
+        console.error('🎵 InterviewSession: Error checking audio support:', error);
         setIsAudioSupported(false);
       }
     };

@@ -38,21 +38,42 @@ export class BrowserAudioService {
     audioContext: boolean;
     supportedFormats: string[];
   } {
-    const supportedFormats = [
+    console.log('🎵 BrowserAudioService: checkSupport called');
+    
+    const getUserMediaSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+    const mediaRecorderSupported = !!window.MediaRecorder;
+    const audioContextSupported = !!window.AudioContext;
+    
+    console.log('🎵 BrowserAudioService: getUserMedia supported:', getUserMediaSupported);
+    console.log('🎵 BrowserAudioService: MediaRecorder supported:', mediaRecorderSupported);
+    console.log('🎵 BrowserAudioService: AudioContext supported:', audioContextSupported);
+    
+    const testFormats = [
       'audio/webm;codecs=opus',
       'audio/webm',
       'audio/ogg;codecs=opus',
       'audio/mp4',
       'audio/wav'
-    ].filter(format => window.MediaRecorder?.isTypeSupported?.(format) || false);
+    ];
+    
+    const supportedFormats = testFormats.filter(format => {
+      const isSupported = window.MediaRecorder?.isTypeSupported?.(format) || false;
+      console.log(`🎵 BrowserAudioService: Format ${format} supported:`, isSupported);
+      return isSupported;
+    });
 
-    return {
+    console.log('🎵 BrowserAudioService: Supported formats:', supportedFormats);
+
+    const result = {
       isBrowser: true,
-      getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-      mediaRecorder: !!window.MediaRecorder,
-      audioContext: !!window.AudioContext,
+      getUserMedia: getUserMediaSupported,
+      mediaRecorder: mediaRecorderSupported,
+      audioContext: audioContextSupported,
       supportedFormats
     };
+    
+    console.log('🎵 BrowserAudioService: checkSupport result:', result);
+    return result;
   }
 
   /**
