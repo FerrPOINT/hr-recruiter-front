@@ -1,4 +1,5 @@
 import { apiService } from './apiService';
+import { BrowserAudioService } from './browserAudioService';
 
 export interface AudioRecordingOptions {
   duration?: number;
@@ -22,7 +23,7 @@ export interface AudioDevice {
 
 // Аудио сервис - работает ТОЛЬКО в браузере
 export class AudioService {
-  private browserService: any = null;
+  private browserService: BrowserAudioService | null = null;
   private onProgress?: (progress: number) => void;
   private onLevelChange?: (level: number) => void;
 
@@ -31,15 +32,13 @@ export class AudioService {
   }
 
   /**
-   * Получает браузерный сервис (загружается ТОЛЬКО в браузере)
+   * Получает браузерный сервис (создается только в браузере)
    */
-  private async getBrowserService() {
+  private getBrowserService(): BrowserAudioService {
     if (!this.browserService) {
-      console.log('🎵 AudioService: Loading browser service...');
-      // Динамический импорт - загружается ТОЛЬКО в браузере
-      const { BrowserAudioService } = await import('./browserAudioService');
+      console.log('🎵 AudioService: Creating browser service...');
       this.browserService = new BrowserAudioService();
-      console.log('✅ AudioService: Browser service loaded');
+      console.log('✅ AudioService: Browser service created');
     }
     return this.browserService;
   }
@@ -55,7 +54,7 @@ export class AudioService {
     supportedFormats: string[];
   }> {
     try {
-      const browserService = await this.getBrowserService();
+      const browserService = this.getBrowserService();
       return browserService.checkSupport();
     } catch (error) {
       console.error('❌ AudioService: Failed to check support:', error);
@@ -74,7 +73,7 @@ export class AudioService {
    */
   async getAudioDevices(): Promise<AudioDevice[]> {
     try {
-      const browserService = await this.getBrowserService();
+      const browserService = this.getBrowserService();
       return browserService.getAudioDevices();
     } catch (error) {
       console.error('❌ AudioService: Failed to get audio devices:', error);
@@ -86,7 +85,7 @@ export class AudioService {
    * Запрашивает разрешение на доступ к микрофону
    */
   async requestPermission(deviceId?: string): Promise<any> {
-    const browserService = await this.getBrowserService();
+    const browserService = this.getBrowserService();
     return browserService.requestPermission(deviceId);
   }
 
@@ -94,10 +93,12 @@ export class AudioService {
    * Начинает запись аудио
    */
   async startRecording(options: AudioRecordingOptions = {}): Promise<void> {
-    const browserService = await this.getBrowserService();
+    const browserService = this.getBrowserService();
     
     // Настраиваем обработчики
-    browserService.setLevelChangeHandler(this.onLevelChange);
+    if (this.onLevelChange) {
+      browserService.setLevelChangeHandler(this.onLevelChange);
+    }
     
     await browserService.startRecording(options);
   }
@@ -106,7 +107,7 @@ export class AudioService {
    * Останавливает запись аудио
    */
   async stopRecording(): Promise<Blob> {
-    const browserService = await this.getBrowserService();
+    const browserService = this.getBrowserService();
     return browserService.stopRecording();
   }
 
@@ -173,7 +174,7 @@ export class AudioService {
    */
   async getRecordingStatus(): Promise<boolean> {
     try {
-      const browserService = await this.getBrowserService();
+      const browserService = this.getBrowserService();
       return browserService.getRecordingStatus();
     } catch (error) {
       console.error('❌ AudioService: Error getting recording status:', error);
