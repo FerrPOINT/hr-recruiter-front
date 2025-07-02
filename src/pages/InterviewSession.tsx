@@ -142,6 +142,31 @@ const InterviewSession: React.FC = () => {
     })();
   }, [params]);
 
+  // Проверка поддержки аудио в браузере
+  useEffect(() => {
+    const checkAudioSupport = async () => {
+      try {
+        const support = await audioService.checkSupport();
+        console.log('Audio support check:', support);
+        
+        if (!support.isBrowser || !support.getUserMedia || !support.mediaRecorder) {
+          console.warn('Audio APIs not supported in this environment');
+          setIsAudioSupported(false);
+        } else {
+          setIsAudioSupported(true);
+        }
+      } catch (error) {
+        console.error('Error checking audio support:', error);
+        setIsAudioSupported(false);
+      }
+    };
+
+    // Проверяем поддержку аудио только после загрузки данных
+    if (!loading) {
+      checkAudioSupport();
+    }
+  }, [loading]);
+
   // Sleep-функция
   function sleep(ms: number) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -320,6 +345,13 @@ const InterviewSession: React.FC = () => {
     console.log('=== START AUDIO RECORDING ===');
     console.log('isMicTest:', isMicTest);
     
+    // Проверяем поддержку аудио перед записью
+    if (!isAudioSupported) {
+      console.error('Audio not supported in this environment');
+      toast.error('Аудио не поддерживается в данной среде');
+      return;
+    }
+    
     try {
       // Настраиваем обработчики
       audioService.setLevelChangeHandler((level) => {
@@ -476,11 +508,11 @@ const InterviewSession: React.FC = () => {
   };
 
   // Функция для очистки аудио ресурсов
-  const cleanupAudioResources = () => {
+  const cleanupAudioResources = async () => {
     console.log('=== CLEANUP AUDIO RESOURCES ===');
     
     try {
-      audioService.cleanup();
+      await audioService.cleanup();
       setIsRecording(false);
       setRecordTimer(0);
       setAudioLevel(0);
