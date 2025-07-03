@@ -28,17 +28,12 @@ export interface ApiClient {
 export function createApiClient(
     username?: string, 
     password?: string, 
-    basePath?: string
+    basePath: string = '/api/v1'
 ): ApiClient {
-    const apiHost = process.env.REACT_APP_RECRUITER_API_HOST as string;
-    if (!apiHost) {
-        throw new Error('REACT_APP_RECRUITER_API_HOST is not set in .env');
-    }
-    const finalBasePath = 'http://' + apiHost + '/api/v1';
     const config = new Configuration({
         username,
         password,
-        basePath: finalBasePath,
+        basePath,
         baseOptions: {
             // Убираем глобальный Content-Type, чтобы он не переопределял multipart/form-data
             // headers: {

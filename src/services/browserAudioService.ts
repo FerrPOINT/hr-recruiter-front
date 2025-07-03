@@ -48,11 +48,25 @@ export class BrowserAudioService {
       console.log('🎵 BrowserAudioService: navigator.mediaDevices keys:', Object.keys(navigator.mediaDevices));
     }
     
-    // Проверяем протокол
+    // Проверяем протокол и безопасный контекст
     console.log('🎵 BrowserAudioService: Current protocol:', window.location.protocol);
     console.log('🎵 BrowserAudioService: Is HTTPS:', window.location.protocol === 'https:');
     console.log('🎵 BrowserAudioService: Is localhost:', window.location.hostname === 'localhost');
     console.log('🎵 BrowserAudioService: Is 127.0.0.1:', window.location.hostname === '127.0.0.1');
+    
+    // Проверяем Secure Context (важно для MediaDevices)
+    const isSecureContext = window.isSecureContext;
+    console.log('🎵 BrowserAudioService: Is Secure Context:', isSecureContext);
+    
+    // Проверяем, почему Secure Context может быть false
+    if (!isSecureContext) {
+        console.error('🎵 BrowserAudioService: НЕ безопасный контекст!');
+        console.error('🎵 BrowserAudioService: Причины:');
+        console.error('  - Протокол не HTTPS');
+        console.error('  - Домен не localhost/127.0.0.1');
+        console.error('  - Неправильные SSL сертификаты');
+        console.error('  - CSP блокирует доступ');
+    }
     
     const getUserMediaSupported = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
     const mediaRecorderSupported = !!window.MediaRecorder;
@@ -100,8 +114,29 @@ export class BrowserAudioService {
         if (error instanceof Error) {
           console.error('🎵 BrowserAudioService: Error name:', error.name);
           console.error('🎵 BrowserAudioService: Error message:', error.message);
+          
+          // Анализируем конкретные ошибки
+          if (error.name === 'NotAllowedError') {
+            console.error('🎵 BrowserAudioService: Пользователь отклонил разрешение на микрофон');
+          } else if (error.name === 'NotSupportedError') {
+            console.error('🎵 BrowserAudioService: Браузер не поддерживает getUserMedia');
+          } else if (error.name === 'NotReadableError') {
+            console.error('🎵 BrowserAudioService: Микрофон занят другим приложением');
+          } else if (error.name === 'SecurityError') {
+            console.error('🎵 BrowserAudioService: ОШИБКА БЕЗОПАСНОСТИ - требуется HTTPS!');
+          } else if (error.name === 'NotFoundError') {
+            console.error('🎵 BrowserAudioService: Микрофон не найден');
+          } else {
+            console.error('🎵 BrowserAudioService: Неизвестная ошибка:', error.name);
+          }
         }
       }
+    } else {
+      console.error('🎵 BrowserAudioService: getUserMedia не поддерживается');
+      console.error('🎵 BrowserAudioService: Возможные причины:');
+      console.error('  - Не HTTPS (SecurityError)');
+      console.error('  - Браузер не поддерживает MediaDevices API');
+      console.error('  - CSP блокирует доступ');
     }
     
     return result;
