@@ -28,7 +28,7 @@ export interface ApiClient {
 export function createApiClient(
     username?: string, 
     password?: string, 
-    basePath: string = '/api/v1'
+    basePath: string = (process.env.REACT_APP_LOCAL_API ? 'http://localhost:8080/api/v1' : '/api/v1')
 ): ApiClient {
     const config = new Configuration({
         username,
