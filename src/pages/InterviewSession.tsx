@@ -217,29 +217,8 @@ const InterviewSession: React.FC = () => {
     const audioBlob = await stopAudioRecording(true); // true = mic test
     console.log('Received audioBlob from stopAudioRecording:', audioBlob);
     console.log('AudioBlob size:', audioBlob?.size, 'bytes');
-    // === Проверка содержимого Blob на нули ===
-    if (audioBlob && audioBlob.size > 0) {
-      audioBlob.arrayBuffer().then(buffer => {
-        const arr = new Uint8Array(buffer);
-        const hasNonZero = arr.some(byte => byte !== 0);
-        console.log('[DEBUG] Первые 100 байт:', arr.slice(0, 100));
-        console.log('[DEBUG] Есть не-нулевые байты?', hasNonZero);
-      });
-    }
     
     if (audioBlob && audioBlob.size > 0) {
-      // Автоматически сохраняем файл на диск
-      const url = URL.createObjectURL(audioBlob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = 'audio_test.webm';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
       console.log('AudioBlob is valid, checking quality...');
       const quality = await checkAudioQuality(audioBlob);
       console.log('Audio quality check result:', quality);
@@ -330,24 +309,6 @@ const InterviewSession: React.FC = () => {
     const audioBlob = await stopAudioRecording(false); // false = regular recording
     
     if (audioBlob && audioBlob.size > 0) {
-      audioBlob.arrayBuffer().then(buffer => {
-        const arr = new Uint8Array(buffer);
-        const hasNonZero = arr.some(byte => byte !== 0);
-        console.log('[DEBUG] Первые 100 байт:', arr.slice(0, 100));
-        console.log('[DEBUG] Есть не-нулевые байты?', hasNonZero);
-      });
-      // Автоматически сохраняем файл на диск
-      const url = URL.createObjectURL(audioBlob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = 'audio_test.webm';
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
       console.log('Audio blob exists for answer, size:', audioBlob.size);
       console.log('Calling transcribeInterviewAnswer for answer...');
       const transcript = await transcribeInterviewAnswer(audioBlob, currentQuestion);
