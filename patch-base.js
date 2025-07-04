@@ -1,9 +1,10 @@
 const fs = require('fs');
 const path = './src/client/base.ts';
 
-let content = fs.readFileSync(path, 'utf8');
+// Best practice: используем только REACT_APP_API_BASE_URL для настройки API
+const basePathLine = `export const BASE_PATH =\n  process.env.REACT_APP_API_BASE_URL || '/api/v1';`;
 
-const basePathLine = `export const BASE_PATH =\n  process.env.REACT_APP_LOCAL_API\n    ? 'http://localhost:8080/api/v1'\n    : '/api/v1';`;
+let content = fs.readFileSync(path, 'utf8');
 
 if (/export const BASE_PATH = .+;/.test(content)) {
   content = content.replace(

@@ -209,6 +209,10 @@ export class AudioService {
       }
     }
   }
+
+  getCurrentFormat(): string {
+    return this.browserService?.getCurrentFormat?.() || 'webm';
+  }
 }
 
 // Создаем единственный экземпляр сервиса

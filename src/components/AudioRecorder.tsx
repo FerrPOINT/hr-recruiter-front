@@ -16,6 +16,9 @@ interface AudioRecorderProps {
   className?: string;
 }
 
+// Минимальная длительность записи (мс)
+const MIN_RECORDING_MS = 3000;
+
 export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   onRecordingComplete,
   onTranscriptionComplete,
@@ -41,6 +44,8 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
   } | null>(null);
   const [hasPermission, setHasPermission] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recordFormat, setRecordFormat] = useState('');
+  const [tempAudioUrl, setTempAudioUrl] = useState<string | null>(null);
 
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const levelRef = useRef<HTMLDivElement>(null);
@@ -59,6 +64,10 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       audioService.cleanup();
     };
   }, []);
+
+  useEffect(() => {
+    setRecordFormat(audioService.getCurrentFormat().toUpperCase());
+  }, [isRecording]);
 
   const checkSupport = async () => {
     try {
@@ -100,9 +109,6 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       setIsRecording(true);
       setTimer(0);
 
-      // Настраиваем обработчики
-      audioService.setLevelChangeHandler(setAudioLevel);
-
       // Начинаем запись
       const options: AudioRecordingOptions = {
         duration,
@@ -111,6 +117,7 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       };
 
       await audioService.startRecording(options);
+      (window as any).__audioRecordingStartedAt = Date.now();
 
       // Запускаем таймер
       if (showTimer) {
@@ -131,6 +138,13 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     if (!isRecording) return;
 
     try {
+      // Минимальная задержка
+      const startedAt = (window as any).__audioRecordingStartedAt || 0;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_RECORDING_MS) {
+        await new Promise(res => setTimeout(res, MIN_RECORDING_MS - elapsed));
+      }
+
       // Останавливаем таймер
       if (timerRef.current) {
         clearInterval(timerRef.current);
@@ -141,6 +155,16 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
       const audioBlob = await audioService.stopRecording();
       setIsRecording(false);
       setAudioLevel(0);
+
+      // Проверка на пустой Blob
+      if (audioBlob.size === 0) {
+        setError('Ошибка: аудиофайл пустой. Проверьте микрофон и разрешения.');
+        toast.error('Ошибка: аудиофайл пустой. Проверьте микрофон и разрешения.');
+        return;
+      }
+
+      // Сохраняем blob и выводим ссылку
+      const url = saveBlobToTemp(audioBlob);
 
       // Вызываем callback
       if (onRecordingComplete) {
@@ -191,6 +215,17 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
     if (level < 10) return 'bg-red-500';
     if (level < 30) return 'bg-yellow-500';
     return 'bg-green-500';
+  };
+
+  const saveBlobToTemp = (blob: Blob) => {
+    // Генерируем уникальное имя файла
+    const ext = blob.type.includes('mp3') ? 'mp3' : blob.type.includes('wav') ? 'wav' : 'webm';
+    const fileName = `audio_${Date.now()}.${ext}`;
+    // Сохраняем blob в temp через ObjectURL (физически в public/temp/ нельзя из браузера, но можно дать ссылку на blob)
+    const url = URL.createObjectURL(blob);
+    console.log('Ссылка на аудиофайл для проверки:', url);
+    setTempAudioUrl(url);
+    return url;
   };
 
   if (!support) {
@@ -282,6 +317,16 @@ export const AudioRecorder: React.FC<AudioRecorderProps> = ({
         <div className="flex items-center space-x-2 text-red-600 text-sm">
           <AlertCircle className="h-4 w-4" />
           <span>{error}</span>
+        </div>
+      )}
+
+      <div style={{marginTop: 8, fontSize: 13, color: '#888'}}>Формат записи: {recordFormat}</div>
+
+      {tempAudioUrl && (
+        <div style={{marginTop: 8, fontSize: 13}}>
+          <a href={tempAudioUrl} download="audio_test.webm" target="_blank" rel="noopener noreferrer">
+            Скачать аудиофайл для проверки
+          </a>
         </div>
       )}
     </div>

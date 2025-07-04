@@ -25,11 +25,16 @@ export interface ApiClient {
     default: DefaultApi;
 }
 
+// Best practice: используем только REACT_APP_API_BASE_URL для настройки API
 export function createApiClient(
     username?: string, 
     password?: string, 
-    basePath: string = (process.env.REACT_APP_LOCAL_API ? 'http://localhost:8080/api/v1' : '/api/v1')
+    basePath: string = process.env.REACT_APP_API_BASE_URL || '/api/v1'
 ): ApiClient {
+    // Для отладки:
+    console.log('🔧 createApiClient DEBUG:');
+    console.log('  REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
+    console.log('  basePath:', basePath);
     const config = new Configuration({
         username,
         password,

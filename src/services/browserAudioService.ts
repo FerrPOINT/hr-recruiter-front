@@ -19,6 +19,10 @@ export class BrowserAudioService {
   private audioContext: any = null;
   private analyser: any = null;
 
+  private currentFormat: string = 'webm';
+
+  private onDataAvailableCount = 0;
+
   constructor() {
     console.log('🎵 BrowserAudioService: Constructor called');
     
@@ -203,86 +207,93 @@ export class BrowserAudioService {
   }
 
   /**
+   * Выбирает лучший поддерживаемый формат (mp3 > wav > webm)
+   */
+  private selectBestFormat(): {format: string, mimeType: string} {
+    const preferred = [
+      {format: 'mp3', mimeType: 'audio/mpeg'},
+      {format: 'wav', mimeType: 'audio/wav'},
+      {format: 'webm', mimeType: 'audio/webm;codecs=opus'}
+    ];
+    for (const opt of preferred) {
+      if (window.MediaRecorder && window.MediaRecorder.isTypeSupported(opt.mimeType)) {
+        return opt;
+      }
+    }
+    // Fallback
+    return {format: 'webm', mimeType: 'audio/webm'};
+  }
+
+  /**
+   * Получить текущий формат (для UI)
+   */
+  getCurrentFormat(): string {
+    return this.currentFormat;
+  }
+
+  /**
    * Начинает запись аудио
    */
   async startRecording(options: any = {}): Promise<void> {
-    console.log('🎵 BrowserAudioService: startRecording called');
-    
     if (!window.MediaRecorder) {
-      console.error('❌ BrowserAudioService: MediaRecorder API not available');
       throw new Error('MediaRecorder API недоступен');
     }
-
     if (this.isRecording) {
-      console.error('❌ BrowserAudioService: Recording already in progress');
       throw new Error('Запись уже идет');
     }
-
     // Получаем поток, если еще не получен
     if (!this.audioStream) {
       await this.requestPermission();
     }
-
-    const {
-      format = 'webm',
-      quality = 'high',
-      duration
-    } = options;
-
-    // Определяем MIME тип
-    const mimeType = this.getMimeType(format, quality);
-    
+    // Выбираем лучший формат
+    const {format, mimeType} = this.selectBestFormat();
+    this.currentFormat = format;
+    const quality = options.quality || 'high';
+    // Очищаем чанки только здесь!
+    this.audioChunks = [];
+    this.onDataAvailableCount = 0;
+    this.isRecording = true;
     // Создаем MediaRecorder
     this.mediaRecorder = new window.MediaRecorder(this.audioStream, {
       mimeType,
       audioBitsPerSecond: this.getBitRate(quality)
     });
-
-    this.audioChunks = [];
-    this.isRecording = true;
-
-    // Настраиваем обработчики событий
+    // Назначаем обработчики только один раз
     this.mediaRecorder.ondataavailable = (event: any) => {
+      this.onDataAvailableCount++;
       if (event.data.size > 0) {
         this.audioChunks.push(event.data);
       }
+      // Минимальный лог для диагностики
+      if (this.onDataAvailableCount === 1) {
+        console.log('[AUDIO] ondataavailable #1, size:', event.data.size);
+      } else {
+        console.log('[AUDIO] ondataavailable #' + this.onDataAvailableCount + ', size:', event.data.size);
+      }
     };
-
     this.mediaRecorder.onstop = () => {
       this.isRecording = false;
       if (this.recordingTimer) {
         clearTimeout(this.recordingTimer);
         this.recordingTimer = null;
       }
+      const blob = new Blob(this.audioChunks, { type: this.mediaRecorder.mimeType });
+      console.log('[AUDIO] onstop, total chunks:', this.audioChunks.length, 'final blob size:', blob.size);
+      // Не очищаем this.audioChunks до формирования Blob!
     };
-
     // Запускаем анализ уровня звука
     this.startAudioAnalysis();
-
     // Начинаем запись
-    this.mediaRecorder.start(1000);
-
-    // Устанавливаем таймер, если указана длительность
-    if (duration && duration > 0) {
-      this.recordingTimer = setTimeout(() => {
-        this.stopRecording();
-      }, duration * 1000);
-    }
-
-    console.log('✅ BrowserAudioService: Recording started successfully');
+    this.mediaRecorder.start();
   }
 
   /**
    * Останавливает запись аудио
    */
   async stopRecording(): Promise<Blob> {
-    console.log('🎵 BrowserAudioService: stopRecording called');
-    
     if (!this.isRecording || !this.mediaRecorder) {
-      console.error('❌ BrowserAudioService: No active recording to stop');
       throw new Error('Нет активной записи');
     }
-
     return new Promise((resolve) => {
       this.mediaRecorder.onstop = () => {
         this.isRecording = false;
@@ -290,15 +301,10 @@ export class BrowserAudioService {
           clearTimeout(this.recordingTimer);
           this.recordingTimer = null;
         }
-
-        const blob = new Blob(this.audioChunks, { 
-          type: this.mediaRecorder.mimeType 
-        });
-        
-        console.log(`✅ BrowserAudioService: Recording stopped. Size: ${blob.size} bytes`);
+        const blob = new Blob(this.audioChunks, { type: this.mediaRecorder.mimeType });
+        console.log('[AUDIO] onstop, total chunks:', this.audioChunks.length, 'final blob size:', blob.size);
         resolve(blob);
       };
-
       this.mediaRecorder.stop();
     });
   }
@@ -355,20 +361,18 @@ export class BrowserAudioService {
    * Определяет MIME тип для записи
    */
   private getMimeType(format: string, quality: string): string {
+    // Не используется напрямую, но оставим для обратной совместимости
     const mimeTypes = {
       webm: ['audio/webm;codecs=opus', 'audio/webm'],
-      mp3: ['audio/mp4', 'audio/mpeg'],
+      mp3: ['audio/mpeg', 'audio/mp3', 'audio/mp4'],
       wav: ['audio/wav']
     };
-
     const types = mimeTypes[format as keyof typeof mimeTypes] || mimeTypes.webm;
-    
     for (const type of types) {
       if (window.MediaRecorder.isTypeSupported(type)) {
         return type;
       }
     }
-
     return 'audio/webm';
   }
 
