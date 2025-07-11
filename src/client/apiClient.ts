@@ -10,6 +10,10 @@ import { AnalyticsReportsApi } from './apis/analytics-reports-api';
 import { SettingsApi } from './apis/settings-api';
 import { AIApi } from './apis/aiapi';
 import { DefaultApi } from './apis/default-api';
+import { VoiceInterviewsApi } from './apis/voice-interviews-api';
+// Professional: Always import the auth store for token access
+import { useAuthStore } from '../store/authStore';
+import axios from 'axios';
 
 export interface ApiClient {
     auth: AuthApi;
@@ -23,33 +27,25 @@ export interface ApiClient {
     settings: SettingsApi;
     ai: AIApi;
     default: DefaultApi;
+    voiceInterviews: VoiceInterviewsApi;
 }
 
-// Best practice: используем только REACT_APP_API_BASE_URL для настройки API
+/**
+ * Professional API client factory.
+ * - Always injects the current JWT token from zustand store into all requests via OpenAPI Configuration's accessToken property.
+ * - Removes all Basic Auth logic (username/password).
+ * - Ensures Authorization: Bearer <token> is set for all protected endpoints.
+ * - If token is null, requests are sent without Authorization (for public endpoints).
+ * - To update token after login/logout, simply re-create the client (or use a singleton pattern if desired).
+ */
 export function createApiClient(
-    username?: string, 
-    password?: string, 
     basePath: string = process.env.REACT_APP_API_BASE_URL || '/api/v1'
 ): ApiClient {
-    // Для отладки:
-    console.log('🔧 createApiClient DEBUG:');
-    console.log('  REACT_APP_API_BASE_URL:', process.env.REACT_APP_API_BASE_URL);
-    console.log('  basePath:', basePath);
+    // Always provide a function to access the latest token from zustand
     const config = new Configuration({
-        username,
-        password,
         basePath,
-        baseOptions: {
-            // Убираем глобальный Content-Type, чтобы он не переопределял multipart/form-data
-            // headers: {
-            //     'Content-Type': 'application/json',
-            // },
-            // Правильная настройка Basic Auth для axios
-            auth: username && password ? {
-                username,
-                password
-            } : undefined
-        }
+        accessToken: () => useAuthStore.getState().token || '',
+        // baseOptions can be extended here if needed
     });
 
     return {
@@ -63,6 +59,37 @@ export function createApiClient(
         analyticsReports: new AnalyticsReportsApi(config),
         settings: new SettingsApi(config),
         ai: new AIApi(config),
-        default: new DefaultApi(config)
+        default: new DefaultApi(config),
+        voiceInterviews: new VoiceInterviewsApi(config)
     };
 }
+
+// Global axios interceptor for 401/403 errors
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      console.log(`🔍 ${error.response.status} ${error.response.status === 401 ? 'Unauthorized' : 'Forbidden'} detected`);
+      console.log(`🔍 Request URL: ${error.config?.url}`);
+      console.log(`🔍 Request method: ${error.config?.method}`);
+      console.log(`🔍 Request headers:`, error.config?.headers);
+      
+      // Don't show modal if we're already on login page or if it's a login request
+      const isLoginRequest = error.config?.url?.includes('/auth/login') || 
+                           error.config?.url?.includes('/candidates/auth');
+      const isOnLoginPage = window.location.pathname === '/login';
+      
+      if (!isLoginRequest && !isOnLoginPage) {
+        // Show session expired modal instead of immediate redirect
+        useAuthStore.getState().showSessionExpired();
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+/**
+ * Global API client instance.
+ * Use this singleton instance throughout the application instead of creating new clients.
+ */
+export const apiClient = createApiClient();

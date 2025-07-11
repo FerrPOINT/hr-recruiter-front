@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  wireguard:
+    image: ghcr.io/linuxserver/wireguard
+    container_name: wg-client
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Moscow
+    volumes:
+      - ./wireguard:/config
+      - /lib/modules:/lib/modules
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-elevenlabs
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - wireguard
+    network_mode: "service:wireguard"  # 👈 трафик уходит через VPN
+    restart: unless-stopped

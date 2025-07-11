@@ -1,35 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { authService } from '../services/authService';
+import { useAuthStore } from '../store/authStore';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const { isAuth, isLoading } = useAuthStore();
   const location = useLocation();
 
-  useEffect(() => {
-    const checkAuth = () => {
-      // Проверяем авторизацию через authService
-      const authenticated = authService.isAuthenticated();
-      setIsAuthenticated(authenticated);
-    };
-    checkAuth();
-  }, []);
-
-  // Показываем загрузку пока проверяем авторизацию
-  if (isAuthenticated === null) {
+  // Показываем загрузку во время восстановления сессии
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
   // Если не авторизован, перенаправляем на логин
-  if (!isAuthenticated) {
+  if (!isAuth) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 

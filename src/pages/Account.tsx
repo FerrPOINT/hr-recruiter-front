@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Save, X, User, Mail, Phone, Globe, Shield } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { authService } from '../services/authService';
+import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 
 interface UserData {
@@ -17,6 +17,7 @@ interface UserData {
 
 const Account: React.FC = () => {
   const navigate = useNavigate();
+  const { logout } = useAuthStore();
   const [user, setUser] = useState<UserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -55,7 +56,7 @@ const Account: React.FC = () => {
 
   const handleLogout = async () => {
     try {
-      await authService.logout();
+      logout();
       toast.success('Выход выполнен успешно');
       navigate('/login');
     } catch (error: any) {

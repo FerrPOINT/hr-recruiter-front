@@ -1,11 +1,4 @@
 // Браузерные аудио API - выполняется ТОЛЬКО в браузере
-console.log('🎵 BrowserAudioService: Module loaded');
-
-// Строгая проверка - если мы не в браузере, модуль не должен загружаться
-if (typeof window === 'undefined' || typeof navigator === 'undefined') {
-  console.error('❌ BrowserAudioService: Attempting to load on server!');
-  throw new Error('BrowserAudioService can only be loaded in browser environment');
-}
 
 export class BrowserAudioService {
   private isRecording = false;
@@ -26,8 +19,9 @@ export class BrowserAudioService {
   constructor() {
     console.log('🎵 BrowserAudioService: Constructor called');
     
-    // Дополнительная проверка безопасности
+    // Проверка безопасности - только при создании экземпляра
     if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      console.error('❌ BrowserAudioService: Attempting to instantiate on server!');
       throw new Error('BrowserAudioService can only be instantiated in browser environment');
     }
   }

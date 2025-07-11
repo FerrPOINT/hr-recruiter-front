@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, RefreshCw, GripVertical } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { authService } from '../services/authService';
+import { useAuthStore } from '../store/authStore';
 import { PositionStatusEnum } from '../client/models/position-status-enum';
 import { QuestionTypeEnum } from '../client/models/question-type-enum';
 import toast from 'react-hot-toast';
@@ -137,6 +137,7 @@ const SortableQuestionCard: React.FC<{
 const VacancyCreate: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { isAuth } = useAuthStore();
   
   // Табы формы
   // const [tab, setTab] = useState<'details' | 'company'>('details');
@@ -163,9 +164,12 @@ const VacancyCreate: React.FC = () => {
   });
   
   // Вопросы с критериями оценки
-  const [questions, setQuestions] = useState<Question[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isGenLoading, setIsGenLoading] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [regeneratingQuestion, setRegeneratingQuestion] = useState<string | null>(null);
 
   // Логируем изменения в вопросах
@@ -307,40 +311,65 @@ const VacancyCreate: React.FC = () => {
     }
   };
 
-  // Генерация вакансии через AI
-  const generatePosition = async () => {
-    setIsGenLoading(true);
+  // Оптимизированная функция для генерации позиции
+  const generatePositionWithRetry = async (description: string, questionsCount: number, questionType: string) => {
     try {
-      const result = await apiService.generatePosition(form.description, Number(form.questionsCount), form.questionType);
-      
-      // Обновляем форму с данными от AI
-      if (result.title) {
-        setForm(prev => ({ ...prev, title: result.title }));
-      }
-      if (result.description !== undefined) {
-        setForm(prev => ({ ...prev, description: result.description || '' }));
-      }
-      if (result.topics && result.topics.length > 0) {
-        setForm(prev => ({ ...prev, topics: result.topics }));
-      }
-      if (result.level) {
-        setForm(prev => ({ ...prev, level: result.level }));
-      }
-      
-      // Преобразуем вопросы AI в формат компонента
-      const newQuestions: Question[] = result.questions.map((q: any, index: number) => ({
-        id: Math.random().toString(36).substr(2, 9),
-        text: q.text,
-        evaluationCriteria: 'Оценить глубину знаний, практический опыт, способность объяснять сложные концепции'
-      }));
-      
-      setQuestions(newQuestions);
-      toast.success('Вакансия сгенерирована');
+      console.log('Generating position with:', { description, questionsCount, questionType });
+      const result = await apiService.generatePosition(description, questionsCount, questionType);
+      console.log('Generation result:', result);
+      return result;
     } catch (error) {
-      console.error('Error generating position:', error);
-      toast.error('Ошибка генерации вакансии');
+      console.error('Failed to generate position:', error);
+      throw error;
+    }
+  };
+
+  const handleGenerateQuestions = async () => {
+    if (!form.description.trim()) {
+      setError('Введите описание вакансии для генерации вопросов');
+      return;
+    }
+
+    setIsGenerating(true);
+    setError(null);
+
+    try {
+      let result;
+      
+      if (form.questionType === 'single') {
+        // Генерация одного вопроса
+        result = await generatePositionWithRetry(form.description, 1, form.questionType);
+      } else {
+        // Генерация нескольких вопросов
+        const count = Number(form.questionsCount);
+        if (count < 1 || count > 20) {
+          setError('Количество вопросов должно быть от 1 до 20');
+          return;
+        }
+        result = await generatePositionWithRetry(form.description, count, form.questionType);
+      }
+
+      if (result && result.questions && result.questions.length > 0) {
+        // Добавляем сгенерированные вопросы
+        const newQuestions = result.questions.map((q: any, index: number) => ({
+          id: `generated-${Date.now()}-${index}`,
+          text: q.text,
+          type: q.type || 'text',
+          order: questions.length + index + 1,
+          isRequired: true,
+          evaluationCriteria: ''
+        }));
+
+        setQuestions(prev => [...prev, ...newQuestions]);
+        setSuccess(`Сгенерировано ${newQuestions.length} вопросов`);
+      } else {
+        setError('Не удалось сгенерировать вопросы');
+      }
+    } catch (error: any) {
+      console.error('Error generating questions:', error);
+      setError(error.response?.data?.message || 'Ошибка при генерации вопросов');
     } finally {
-      setIsGenLoading(false);
+      setIsGenerating(false);
     }
   };
 
@@ -349,7 +378,7 @@ const VacancyCreate: React.FC = () => {
     e.preventDefault();
     
     // Проверяем аутентификацию
-    if (!authService.isAuthenticated()) {
+    if (!isAuth) {
       toast.error('Необходимо войти в систему');
       navigate('/login');
       return;
@@ -494,7 +523,7 @@ const VacancyCreate: React.FC = () => {
         toast.success('Вакансия создана');
       }
       
-      navigate('/vacancies');
+      navigate('/admin/vacancies');
     } catch (error) {
       console.error('Error saving vacancy:', error);
       toast.error('Ошибка сохранения вакансии');
@@ -566,7 +595,7 @@ const VacancyCreate: React.FC = () => {
               <button 
                 type="button" 
                 className="btn-primary h-10 px-6 text-base" 
-                onClick={generatePosition} 
+                onClick={() => generatePositionWithRetry(form.description, Number(form.questionsCount), form.questionType)} 
                 disabled={isGenLoading || !form.description.trim()}
               >
                 {isGenLoading ? 'Генерируем...' : 'Сгенерировать'}

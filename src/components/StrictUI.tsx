@@ -181,7 +181,7 @@ export const StrictInput: React.FC<StrictInputProps> = ({
         )}
       </div>
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-600" aria-live="assertive" role="alert">{error}</p>
       )}
     </div>
   );
@@ -278,7 +278,7 @@ export const StrictSelect: React.FC<StrictSelectProps> = ({
         )}
       </div>
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-600" aria-live="assertive" role="alert">{error}</p>
       )}
     </div>
   );
@@ -359,7 +359,7 @@ export const StrictTextarea: React.FC<StrictTextareaProps> = ({
         )}
       </div>
       {error && (
-        <p className="text-sm text-red-600">{error}</p>
+        <p className="text-sm text-red-600" aria-live="assertive" role="alert">{error}</p>
       )}
       {maxLength && (
         <p className="text-xs text-gray-500 text-right">

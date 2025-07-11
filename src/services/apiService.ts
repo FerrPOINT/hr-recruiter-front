@@ -1,4 +1,14 @@
-import { createApiClient } from '../client/apiClient';
+import { apiClient, type ApiClient } from '../client/apiClient';
+import axios from 'axios';
+import { useAuthStore } from '../store/authStore';
+import { 
+  mapCandidateStatusEnum,
+  mapPositionStatusEnum,
+  mapInterviewStatusEnum,
+  mapInterviewResultEnum,
+  mapRoleEnum,
+  mapQuestionTypeEnum
+} from '../utils/enumMapper';
 import { 
   Position, 
   PositionCreateRequest, 
@@ -24,8 +34,13 @@ import {
   PositionDataGenerationResponse,
   PositionAiGenerationRequest,
   PositionAiGenerationResponse,
-  PaginatedResponse
+  PaginatedResponse,
+  VoiceMessage,
+  VoiceSessionResponse,
+  VoiceSessionStatus,
+  InterviewAnswer
 } from '../client/models';
+import type { ListPositionsOwnerEnum } from '../client/apis/positions-api';
 
 // Type definitions for paginated responses
 interface PositionsPaginatedResponse extends PaginatedResponse {
@@ -41,35 +56,41 @@ interface UsersPaginatedResponse extends PaginatedResponse {
 }
 
 class ApiService {
-  private getApiClient() {
-    // Получаем учетные данные из sessionStorage
-    const username = sessionStorage.getItem('auth_username') || undefined;
-    const password = sessionStorage.getItem('auth_password') || undefined;
-    // Не передаём basePath, используем дефолт из apiClient
-    return createApiClient(username, password);
+  private lastToken: string | null = null;
+
+  // Get API client with current token
+  getApiClient(): ApiClient {
+    const currentToken = useAuthStore.getState().token;
+    this.lastToken = currentToken;
+    return apiClient;
   }
 
   // === AUTHENTICATION ===
   async login(email: string, password: string): Promise<AuthResponse> {
     const loginRequest: LoginRequest = { email, password };
-    const apiClient = createApiClient(email, password);
+    // For login, we don't need token yet, so we can use the global client
     const response = await apiClient.auth.login(loginRequest);
     return response.data;
   }
 
+  // Force refresh API client (useful after login/logout)
+  refreshApiClient() {
+    console.log('🔍 refreshApiClient - No longer needed, using global apiClient');
+    // The global apiClient automatically gets the current token from the store
+  }
+
   async logout(): Promise<void> {
-    const apiClient = this.getApiClient();
     await apiClient.auth.logout();
   }
 
   // === ACCOUNT ===
   async getAccount(): Promise<User> {
-    const response = await this.getApiClient().account.getAccount();
+    const response = await apiClient.account.getAccount();
     return response.data;
   }
 
   async updateAccount(userData: any): Promise<User> {
-    const response = await this.getApiClient().account.updateAccount(userData);
+    const response = await apiClient.account.updateAccount(userData);
     return response.data;
   }
 
@@ -78,26 +99,30 @@ class ApiService {
     status?: PositionStatusEnum; 
     search?: string; 
     page?: number; 
-    size?: number 
+    size?: number;
+    owner?: ListPositionsOwnerEnum;
   }): Promise<{ items: Position[]; total: number }> {
-    console.log('getPositions called with params:', params);
-    
     try {
-      const response = await this.getApiClient().positions.listPositions(
+      const response = await apiClient.positions.listPositions(
         params?.status,
+        params?.owner,
         params?.search,
         params?.page,
         params?.size
       );
       
-      console.log('getPositions response:', response);
       const data = response.data as PositionsPaginatedResponse;
       
       // OpenAPI spec defines Spring Boot Page format with content, totalElements, etc.
       if (data.content && Array.isArray(data.content)) {
-        console.log('Using OpenAPI spec format with content array');
+        // Безопасно маппим enum'ы для каждой позиции
+        const items = data.content.map(position => ({
+          ...position,
+          status: mapPositionStatusEnum(position.status)
+        }));
+        
         return {
-          items: data.content || [],
+          items: items || [],
           total: data.totalElements || 0
         };
       } else {
@@ -110,16 +135,13 @@ class ApiService {
       }
     } catch (error: any) {
       console.error('getPositions error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
       
       // If 400 error, try without status parameter
       if (error.response?.status === 400 && params?.status) {
-        console.log('Retrying without status parameter...');
         try {
-          const retryResponse = await this.getApiClient().positions.listPositions(
+          const retryResponse = await apiClient.positions.listPositions(
             undefined, // remove status
+            params?.owner,
             params?.search,
             params?.page,
             params?.size
@@ -128,8 +150,14 @@ class ApiService {
           const retryData = retryResponse.data as PositionsPaginatedResponse;
           
           if (retryData.content && Array.isArray(retryData.content)) {
+            // Безопасно маппим enum'ы для каждой позиции
+            const items = retryData.content.map(position => ({
+              ...position,
+              status: mapPositionStatusEnum(position.status)
+            }));
+            
             return {
-              items: retryData.content || [],
+              items: items || [],
               total: retryData.totalElements || 0
             };
           } else {
@@ -149,30 +177,34 @@ class ApiService {
   }
 
   async getPosition(id: number): Promise<Position> {
-    const response = await this.getApiClient().positions.getPosition(id);
+    const response = await apiClient.positions.getPosition(id);
     return response.data;
   }
 
   async createPosition(positionData: PositionCreateRequest): Promise<Position> {
-    console.log('Creating position with data:', positionData);
-    console.log('Answer time being sent:', positionData.answerTime);
-    const response = await this.getApiClient().positions.createPosition(positionData);
-    console.log('Position created:', response.data);
-    return response.data;
+    console.log('🔍 createPosition - Starting with token:', useAuthStore.getState().token ? 'present' : 'missing');
+    try {
+      const response = await apiClient.positions.createPosition(positionData);
+      console.log('🔍 createPosition - Success');
+      return response.data;
+    } catch (error: any) {
+      console.error('🔍 createPosition - Error:', error.response?.status, error.response?.data);
+      throw error;
+    }
   }
 
   async updatePosition(id: number, positionData: PositionUpdateRequest): Promise<Position> {
-    const response = await this.getApiClient().positions.updatePosition(id, positionData);
+    const response = await apiClient.positions.updatePosition(id, positionData);
     return response.data;
   }
 
   async getPositionStats(id: number): Promise<any> {
-    const response = await this.getApiClient().positions.getPositionStats(id);
+    const response = await apiClient.positions.getPositionStats(id);
     return response.data;
   }
 
   async getPositionPublicLink(id: number): Promise<{ publicLink: string }> {
-    const response = await this.getApiClient().positions.getPositionPublicLink(id);
+    const response = await apiClient.positions.getPositionPublicLink(id);
     const data = response.data as GetPositionPublicLink200Response;
     return {
       publicLink: data.publicLink || ''
@@ -181,30 +213,29 @@ class ApiService {
 
   // === CANDIDATES ===
   async getCandidates(positionId: number): Promise<Candidate[]> {
-    console.log('getCandidates called with positionId:', positionId);
-    
     try {
-      const response = await this.getApiClient().candidates.listPositionCandidates(positionId);
-      console.log('getCandidates response:', response);
+      const response = await apiClient.candidates.listPositionCandidates(positionId);
       const data = response.data as any;
       
       // OpenAPI spec defines Spring Boot Page format
+      let candidates: any[] = [];
       if (data.content && Array.isArray(data.content)) {
-        console.log('Using OpenAPI spec format with content array');
-        return data.content;
+        candidates = data.content;
       } else if (Array.isArray(data)) {
         // Fallback for direct array response
-        console.log('Using direct array format');
-        return data;
+        candidates = data;
       } else {
         console.error('Unexpected response format:', data);
         return [];
       }
+      
+      // Безопасно маппим enum'ы для каждого кандидата
+      return candidates.map(candidate => ({
+        ...candidate,
+        status: mapCandidateStatusEnum(candidate.status)
+      }));
     } catch (error: any) {
       console.error('getCandidates error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
       
       // Return empty array on error to prevent crashes
       return [];
@@ -212,22 +243,25 @@ class ApiService {
   }
 
   async getCandidate(id: number): Promise<Candidate> {
-    const response = await this.getApiClient().candidates.getCandidate(id);
+    const response = await apiClient.candidates.getCandidate(id);
     return response.data;
   }
 
   async createCandidate(positionId: number, candidateData: CandidateCreateRequest): Promise<Candidate> {
-    const response = await this.getApiClient().candidates.createPositionCandidate(positionId, candidateData);
+    // Удаляем поле source, если оно пустое или не задано
+    const { source, ...rest } = candidateData as any;
+    const dataToSend = (source === undefined || source === null || source === '') ? rest : { ...rest, source };
+    const response = await apiClient.candidates.createPositionCandidate(positionId, dataToSend);
     return response.data;
   }
 
   async updateCandidate(id: number, candidateData: CandidateUpdateRequest): Promise<Candidate> {
-    const response = await this.getApiClient().candidates.updateCandidate(id, candidateData);
+    const response = await apiClient.candidates.updateCandidate(id, candidateData);
     return response.data;
   }
 
   async deleteCandidate(id: number): Promise<void> {
-    await this.getApiClient().candidates.deleteCandidate(id);
+    await apiClient.candidates.deleteCandidate(id);
   }
 
   // === INTERVIEWS ===
@@ -237,24 +271,27 @@ class ApiService {
     page?: number; 
     size?: number 
   }): Promise<{ items: Interview[]; total: number }> {
-    console.log('getInterviews called with params:', params);
-    
     try {
-      const response = await this.getApiClient().interviews.listInterviews(
+      const response = await apiClient.interviews.listInterviews(
         params?.positionId,
         params?.candidateId,
         params?.page,
         params?.size
       );
       
-      console.log('getInterviews response:', response);
       const data = response.data as InterviewsPaginatedResponse;
       
       // OpenAPI spec defines Spring Boot Page format
       if (data.content && Array.isArray(data.content)) {
-        console.log('Using OpenAPI spec format with content array');
+        // Безопасно маппим enum'ы для каждого интервью
+        const items = data.content.map(interview => ({
+          ...interview,
+          status: mapInterviewStatusEnum(interview.status),
+          result: interview.result ? mapInterviewResultEnum(interview.result) : undefined
+        }));
+        
         return {
-          items: data.content || [],
+          items: items || [],
           total: data.totalElements || 0
         };
       } else {
@@ -266,17 +303,13 @@ class ApiService {
       }
     } catch (error: any) {
       console.error('getInterviews error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
       
       // If 400 error, try without optional parameters
       if (error.response?.status === 400) {
-        console.log('Retrying without optional parameters...');
         try {
           const retryResponse = await this.getApiClient().interviews.listInterviews(
-            undefined,
-            undefined,
+            undefined, // remove positionId
+            undefined, // remove candidateId
             params?.page,
             params?.size
           );
@@ -284,8 +317,15 @@ class ApiService {
           const retryData = retryResponse.data as InterviewsPaginatedResponse;
           
           if (retryData.content && Array.isArray(retryData.content)) {
+            // Безопасно маппим enum'ы для каждого интервью
+            const items = retryData.content.map(interview => ({
+              ...interview,
+              status: mapInterviewStatusEnum(interview.status),
+              result: interview.result ? mapInterviewResultEnum(interview.result) : undefined
+            }));
+            
             return {
-              items: retryData.content || [],
+              items: items || [],
               total: retryData.totalElements || 0
             };
           } else {
@@ -314,6 +354,12 @@ class ApiService {
     return response.data;
   }
 
+  async finishInterview(interviewId: number): Promise<Interview> {
+    // Завершаем интервью, устанавливая статус finished и дату завершения
+    const response = await this.getApiClient().interviews.finishInterview(interviewId);
+    return response.data;
+  }
+
   async submitInterviewAnswer(interviewId: number, answerData: InterviewAnswerCreateRequest): Promise<Interview> {
     const response = await this.getApiClient().interviews.submitInterviewAnswer(interviewId, answerData);
     return response.data;
@@ -326,19 +372,21 @@ class ApiService {
 
   // === QUESTIONS ===
   async getQuestions(positionId: number): Promise<{ questions: Question[]; interviewSettings: { answerTime?: number; language?: string; saveAudio?: boolean; saveVideo?: boolean; randomOrder?: boolean; minScore?: number } }> {
-    console.log('getQuestions called with positionId:', positionId);
-    
     try {
       // Используем правильный эндпоинт для получения вопросов с настройками
       const response = await this.getApiClient().questions.getPositionQuestionsWithSettings(positionId);
-      console.log('getQuestions response:', response);
       const data = response.data;
       
       // Проверяем структуру ответа
       if (data.questions && Array.isArray(data.questions)) {
-        console.log('Questions found:', data.questions.length);
+        // Безопасно маппим enum'ы для каждого вопроса
+        const questions = data.questions.map((question: any) => ({
+          ...question,
+          type: mapQuestionTypeEnum(question.type)
+        }));
+        
         return {
-          questions: data.questions || [],
+          questions: questions || [],
           interviewSettings: {
             ...data.interviewSettings,
             minScore: (data.interviewSettings as any)?.minScore || 0
@@ -355,9 +403,6 @@ class ApiService {
       }
     } catch (error: any) {
       console.error('getQuestions error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
       
       // Fallback: попробуем старый эндпоинт
       try {
@@ -368,8 +413,14 @@ class ApiService {
         // Старый эндпоинт возвращает PaginatedResponse
         if (fallbackData.content && Array.isArray(fallbackData.content)) {
           console.log('Using fallback endpoint with content array');
+          // Безопасно маппим enum'ы для каждого вопроса
+          const questions = fallbackData.content.map((question: any) => ({
+            ...question,
+            type: mapQuestionTypeEnum(question.type)
+          }));
+          
           return {
-            questions: fallbackData.content || [],
+            questions: questions || [],
             interviewSettings: {
               minScore: 0
             }
@@ -396,8 +447,27 @@ class ApiService {
   }
 
   async createQuestion(positionId: number, questionData: QuestionCreateRequest): Promise<Question> {
-    const response = await this.getApiClient().questions.createPositionQuestion(positionId, questionData);
-    return response.data;
+    console.log('🔍 createQuestion - Starting with token:', useAuthStore.getState().token ? 'present' : 'missing');
+    console.log('🔍 createQuestion - Position ID:', positionId);
+    
+    // Get the API client and log its configuration
+    const apiClient = this.getApiClient();
+    console.log('🔍 createQuestion - API client obtained, lastToken:', this.lastToken ? `${this.lastToken.substring(0, 20)}...` : 'null');
+    
+    try {
+      const response = await apiClient.questions.createPositionQuestion(positionId, questionData);
+      console.log('🔍 createQuestion - Success');
+      return response.data;
+    } catch (error: any) {
+      console.error('🔍 createQuestion - Error:', error.response?.status, error.response?.data);
+      console.error('🔍 createQuestion - Error details:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        headers: error.response?.headers
+      });
+      throw error;
+    }
   }
 
   async updateQuestion(id: number, questionData: BaseQuestionFields): Promise<Question> {
@@ -411,30 +481,29 @@ class ApiService {
 
   // === TEAM & USERS ===
   async getUsers(): Promise<User[]> {
-    console.log('getUsers called');
-    
     try {
       const response = await this.getApiClient().teamUsers.listUsers();
-      console.log('getUsers response:', response);
       const data = response.data as UsersPaginatedResponse;
       
       // OpenAPI spec defines Spring Boot Page format
+      let users: any[] = [];
       if (data.content && Array.isArray(data.content)) {
-        console.log('Using OpenAPI spec format with content array');
-        return data.content;
+        users = data.content;
       } else if (Array.isArray(data)) {
         // Fallback for direct array response
-        console.log('Using direct array format');
-        return data;
+        users = data;
       } else {
         console.error('Unexpected response format:', data);
         return [];
       }
+      
+      // Безопасно маппим enum'ы для каждого пользователя
+      return users.map(user => ({
+        ...user,
+        role: mapRoleEnum(user.role)
+      }));
     } catch (error: any) {
       console.error('getUsers error:', error);
-      console.error('Error response:', error.response);
-      console.error('Error status:', error.response?.status);
-      console.error('Error data:', error.response?.data);
       
       // Return empty array on error to prevent crashes
       return [];
@@ -504,6 +573,7 @@ class ApiService {
 
   // === AI ===
   async generatePosition(description: string, questionsCount?: number, questionType?: string): Promise<PositionAiGenerationResponse> {
+    console.log('🔍 generatePosition - Starting with token:', useAuthStore.getState().token ? 'present' : 'missing');
     console.log('generatePosition called with:', { description, questionsCount, questionType });
     
     const request: PositionAiGenerationRequest = { 
@@ -514,9 +584,11 @@ class ApiService {
     
     try {
       const response = await this.getApiClient().ai.generatePosition(request);
+      console.log('🔍 generatePosition - Success');
       console.log('generatePosition response:', response.data);
       return response.data;
     } catch (error: any) {
+      console.error('🔍 generatePosition - Error:', error.response?.status, error.response?.data);
       console.error('generatePosition error:', error);
       console.error('Error response:', error.response);
       throw error;
@@ -663,20 +735,105 @@ class ApiService {
     }
   }
 
-  // === DEFAULT API ===
-  async getChecklist(): Promise<any[]> {
-    const response = await this.getApiClient().interviews.getChecklist();
+  // === VOICE INTERVIEWS ===
+  async createVoiceSession(interviewId: number, options?: any): Promise<VoiceSessionResponse> {
+    const response = await this.getApiClient().voiceInterviews.createVoiceSession(interviewId, options);
     return response.data;
   }
 
-  async getInviteInfo(): Promise<any> {
-    const response = await this.getApiClient().interviews.getInviteInfo();
+  async endVoiceSession(interviewId: number): Promise<void> {
+    await this.getApiClient().voiceInterviews.endVoiceSession(interviewId);
+  }
+
+  async getNextQuestion(interviewId: number): Promise<VoiceMessage> {
+    const response = await this.getApiClient().voiceInterviews.getNextQuestion(interviewId);
     return response.data;
   }
 
-  async getLearnMaterials(): Promise<any[]> {
-    const response = await this.getApiClient().default.learnGet();
+  async getVoiceSessionStatus(interviewId: number): Promise<VoiceSessionStatus> {
+    const response = await this.getApiClient().voiceInterviews.getVoiceSessionStatus(interviewId);
     return response.data;
+  }
+
+  async saveVoiceAnswer(interviewId: number, questionId: number, voiceMessage: VoiceMessage): Promise<InterviewAnswer> {
+    const response = await this.getApiClient().voiceInterviews.saveVoiceAnswer(interviewId, questionId, voiceMessage);
+    return response.data;
+  }
+
+  // === MISSING ENDPOINTS ===
+  
+  // Positions
+  async partialUpdatePosition(id: number, status: PositionStatusEnum): Promise<Position> {
+    const response = await this.getApiClient().positions.partialUpdatePosition(id, { status });
+    return response.data;
+  }
+
+  // Questions
+  async getPositionQuestionsWithSettings(positionId: number): Promise<any> {
+    const response = await this.getApiClient().questions.getPositionQuestionsWithSettings(positionId);
+    return response.data;
+  }
+
+  // Account
+  async getUserInfo(): Promise<any> {
+    const response = await this.getApiClient().account.getUserInfo();
+    return response.data;
+  }
+
+  // Analytics & Reports
+  async getInterviewsStats(): Promise<any> {
+    const response = await this.getApiClient().analyticsReports.getInterviewsStats();
+    return response.data;
+  }
+
+  // Settings
+  async createTariff(tariffData: any): Promise<any> {
+    const response = await this.getApiClient().settings.createTariff(tariffData);
+    return response.data;
+  }
+
+  async updateTariff(id: number, tariffData: any): Promise<any> {
+    const response = await this.getApiClient().settings.updateTariff(id, tariffData);
+    return response.data;
+  }
+
+  // Candidates
+  async authCandidate(authData: any): Promise<any> {
+    const response = await this.getApiClient().candidates.authCandidate(authData);
+    return response.data;
+  }
+
+  // === GENERIC HTTP METHODS ===
+  async get(url: string, config?: any): Promise<any> {
+    const response = await axios.get(url, config);
+    return response;
+  }
+
+  async post(url: string, data?: any, config?: any): Promise<any> {
+    const response = await axios.post(url, data, config);
+    return response;
+  }
+
+  async put(url: string, data?: any, config?: any): Promise<any> {
+    const token = useAuthStore.getState().token;
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    
+    const response = await axios.put(url, data, {
+      ...config,
+      headers: { ...headers, ...config?.headers }
+    });
+    return response;
+  }
+
+  async delete(url: string, config?: any): Promise<any> {
+    const token = useAuthStore.getState().token;
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    
+    const response = await axios.delete(url, {
+      ...config,
+      headers: { ...headers, ...config?.headers }
+    });
+    return response;
   }
 
   // === UTILITY METHODS ===

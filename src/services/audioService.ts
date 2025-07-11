@@ -215,5 +215,30 @@ export class AudioService {
   }
 }
 
-// Создаем единственный экземпляр сервиса
-export const audioService = new AudioService(); 
+// Ленивый синглтон - создается только при первом обращении
+let _audioService: AudioService | null = null;
+
+export const audioService = {
+  get instance(): AudioService {
+    if (!_audioService) {
+      console.log('🎵 AudioService: Creating lazy instance...');
+      _audioService = new AudioService();
+    }
+    return _audioService;
+  },
+  
+  // Проксируем все методы к экземпляру
+  checkSupport: () => audioService.instance.checkSupport(),
+  getAudioDevices: () => audioService.instance.getAudioDevices(),
+  requestPermission: (deviceId?: string) => audioService.instance.requestPermission(deviceId),
+  startRecording: (options?: AudioRecordingOptions) => audioService.instance.startRecording(options),
+  stopRecording: () => audioService.instance.stopRecording(),
+  transcribeAudio: (audioBlob: Blob) => audioService.instance.transcribeAudio(audioBlob),
+  transcribeInterviewAnswer: (audioBlob: Blob, interviewId: number, questionId: number) => 
+    audioService.instance.transcribeInterviewAnswer(audioBlob, interviewId, questionId),
+  getRecordingStatus: () => audioService.instance.getRecordingStatus(),
+  setProgressHandler: (handler: (progress: number) => void) => audioService.instance.setProgressHandler(handler),
+  setLevelChangeHandler: (handler: (level: number) => void) => audioService.instance.setLevelChangeHandler(handler),
+  cleanup: () => audioService.instance.cleanup(),
+  getCurrentFormat: () => audioService.instance.getCurrentFormat()
+}; 

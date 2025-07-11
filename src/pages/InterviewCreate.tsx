@@ -24,7 +24,10 @@ const InterviewCreate: React.FC = () => {
     setLoadingVacancies(true);
     (async () => {
       try {
-        const res = await apiService.getPositions();
+        const res = await apiService.getPositions({ 
+          status: 'active', 
+          owner: 'me' 
+        });
         setVacancies(res.items);
       } catch (error: any) {
         console.error('Error loading vacancies:', error);
@@ -62,7 +65,7 @@ const InterviewCreate: React.FC = () => {
       await apiService.startInterview(candidate.id);
       
       toast.success('Собеседование создано');
-      navigate('/vacancies');
+      navigate('/admin/vacancies');
     } catch (error) {
       console.error('Error creating interview:', error);
       toast.error('Ошибка создания собеседования');

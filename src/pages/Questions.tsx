@@ -4,6 +4,9 @@ import { ArrowLeft, Plus, Edit, Trash2, MoveUp, MoveDown } from 'lucide-react';
 import { apiService } from '../services/apiService';
 import { QuestionTypeEnum } from '../client/models/question-type-enum';
 import toast from 'react-hot-toast';
+import { DragEndEvent } from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
+import { Question } from '../client/models/question';
 
 const Questions: React.FC = () => {
   const navigate = useNavigate();
@@ -138,13 +141,45 @@ const Questions: React.FC = () => {
     }
   };
 
+  // Оптимизированная функция для batch обновления порядка вопросов
+  const updateQuestionOrders = async (newQuestions: Question[]) => {
+    try {
+      const updates = newQuestions.map(q => 
+        apiService.updateQuestion(q.id, { order: q.order })
+      );
+      await Promise.all(updates);
+      console.log('Successfully updated question orders');
+    } catch (error) {
+      console.error('Error updating question orders:', error);
+      toast.error('Ошибка обновления порядка вопросов');
+    }
+  };
+
+  // Drag and drop handlers
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (active.id !== over?.id) {
+      const oldIndex = questions.findIndex((item) => item.id === active.id);
+      const newIndex = questions.findIndex((item) => item.id === over?.id);
+
+      const newQuestions = arrayMove(questions, oldIndex, newIndex);
+      
+      // Обновляем порядок в состоянии
+      setQuestions(newQuestions);
+      
+      // Batch обновление в базе данных
+      updateQuestionOrders(newQuestions);
+    }
+  };
+
   if (!positionId) {
     return <div>Position ID is required</div>;
   }
 
   return (
     <div className="w-full max-w-4xl mx-auto">
-      <button onClick={() => navigate('/vacancies')} className="mb-4 flex items-center text-gray-500 hover:text-gray-700">
+              <button onClick={() => navigate('/admin/vacancies')} className="mb-4 flex items-center text-gray-500 hover:text-gray-700">
         <ArrowLeft className="h-5 w-5 mr-2" /> Назад к вакансиям
       </button>
       <div className="bg-white rounded-2xl border border-gray-100 p-8 shadow-lg w-full flex flex-col gap-8">

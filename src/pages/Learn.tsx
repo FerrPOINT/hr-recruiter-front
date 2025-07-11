@@ -10,8 +10,8 @@ const Learn: React.FC = () => {
     setLoading(true);
     (async () => {
       try {
-        const data = await apiService.getLearnMaterials();
-        setMaterials(data);
+        // Удалить или заменить вызов apiService.getLearnMaterials()
+        // ... существующий код ...
       } catch (error) {
         console.error('Error loading learn materials:', error);
         toast.error('Ошибка загрузки обучающих материалов');

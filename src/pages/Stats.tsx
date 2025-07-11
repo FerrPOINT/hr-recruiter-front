@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import VacancyCreateModal from '../components/VacancyCreateModal';
 import { 
   Briefcase, 
   Users, 
@@ -51,6 +52,7 @@ const Stats: React.FC = () => {
   const [stats, setStats] = useState<any[]>([]);
   const [recentInterviews, setRecentInterviews] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -91,10 +93,13 @@ const Stats: React.FC = () => {
           <p className="text-gray-500 mt-1">Обзор активности и статистики</p>
         </div>
         <div className="flex space-x-3">
-          <Link to="/vacancies/create" className="btn-primary flex items-center bg-orange-500 hover:bg-orange-600">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary flex items-center bg-orange-500 hover:bg-orange-600"
+          >
             <Plus className="mr-2 h-4 w-4" />
             Создать вакансию
-          </Link>
+          </button>
           <Link to="#" className="btn-secondary flex items-center bg-gray-200 hover:bg-gray-300 text-gray-800">
             <Plus className="mr-2 h-4 w-4" />
             Новое собеседование
@@ -121,7 +126,7 @@ const Stats: React.FC = () => {
         <div className="px-6 py-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-800">Последние собеседования</h2>
           <Link 
-            to="/interviews" 
+            to="/admin/interviews" 
             className="text-sm text-orange-500 hover:text-orange-600 font-medium"
           >
             Полный список собеседований →
@@ -187,6 +192,17 @@ const Stats: React.FC = () => {
           </table>
         </div>
       </div>
+      
+      {/* Модальное окно создания вакансии */}
+      <VacancyCreateModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        vacancy={null}
+        onSuccess={() => {
+          // Перезагружаем данные
+          window.location.reload();
+        }}
+      />
     </div>
   );
 };

@@ -9,10 +9,13 @@ import {
   Plus,
   Palette,
   CreditCard,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { apiService } from '../services/apiService';
-import { authService } from '../services/authService';
+import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
+import { useTheme } from './ThemeProvider';
 
 interface UserInfo {
   email: string;
@@ -25,78 +28,67 @@ interface VacancyInfo {
 }
 
 const sidebarMenu = [
-  { name: 'Вакансии', href: '/vacancies', icon: Home },
+  { name: 'Вакансии', href: '/admin/vacancies', icon: Home },
   { name: 'Статистика', href: '/', icon: BarChart2 },
-  { name: 'Аккаунт', href: '/account', icon: User },
+  { name: 'Аккаунт', href: '/admin/account', icon: User },
 ];
 
 const Layout: React.FC = () => {
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
   const [vacancies, setVacancies] = useState<VacancyInfo[]>([]);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const { isAuth, logout } = useAuthStore();
   const location = useLocation();
   const isInterviewSession = location.pathname.startsWith('/interview');
   const isInterviewCreatePage = location.pathname === '/interviews/create';
   const isVacancyCreatePage = location.pathname === '/vacancies/create';
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   useEffect(() => {
-    // Проверяем аутентификацию перед загрузкой данных
-    const authStatus = authService.isAuthenticated();
-    setIsAuthenticated(authStatus);
-    
-    if (!authStatus) {
+    // Проверяем аутентификацию
+    if (!isAuth) {
       navigate('/login');
       return;
     }
     
     const fetchData = async () => {
       try {
-        const [user, vacanciesData] = await Promise.all([
-          apiService.getAccount(),
-          apiService.getPositions()
-        ]);
+        // Загружаем только данные пользователя
+        const user = await apiService.getAccount();
         
         setUserInfo({
           email: user.email || '',
           language: user.language || 'Русский',
         });
-        setVacancies(vacanciesData.items?.map(vacancy => ({
-          id: vacancy.id,
-          title: vacancy.title || 'Без названия'
-        })) || []);
       } catch (error: any) {
         console.error('Error loading user data:', error);
-        console.error('Error response:', error.response?.data);
-        console.error('Error status:', error.response?.status);
-        console.error('Error message:', error.message);
         if (error.response?.status === 401) {
           // Очищаем данные аутентификации и перенаправляем на логин
-          authService.logout();
-          setIsAuthenticated(false);
+          logout();
           navigate('/login');
         }
       }
     };
     fetchData();
-  }, [navigate]);
+  }, [navigate, isAuth, logout]);
 
   const isActive = (path: string) => {
     if (path === '/') return location.pathname === '/';
+    if (path.startsWith('/admin/')) {
+      return location.pathname.startsWith(path);
+    }
     return location.pathname === path;
   };
 
-  console.log('Layout render:', { location: location.pathname, isInterviewSession, isInterviewCreatePage, isAuthenticated });
-
   // Не рендерим Layout, пока не проверим аутентификацию
-  if (isAuthenticated === null) {
+  if (isAuth === null) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="text-gray-500">Проверка аутентификации...</div>
     </div>;
   }
 
   // Если не аутентифицирован, не рендерим Layout
-  if (!isAuthenticated) {
+  if (!isAuth) {
     return null;
   }
 
@@ -132,9 +124,9 @@ const Layout: React.FC = () => {
             })}
             {/* Команда */}
             <Link
-              to="/team"
+              to="/admin/team"
               className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                location.pathname === '/team'
+                location.pathname === '/admin/team'
                   ? 'bg-primary-100 text-primary-700'
                   : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
               }`}
@@ -145,9 +137,9 @@ const Layout: React.FC = () => {
 
             {/* Брендинг */}
             <Link
-              to="/branding"
+              to="/admin/branding"
               className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                location.pathname === '/branding'
+                location.pathname === '/admin/branding'
                   ? 'bg-primary-100 text-primary-700'
                   : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
               }`}
@@ -158,9 +150,9 @@ const Layout: React.FC = () => {
 
             {/* Тарифы */}
             <Link
-              to="/tariffs"
+              to="/admin/tariffs"
               className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md ${
-                location.pathname === '/tariffs'
+                location.pathname === '/admin/tariffs'
                   ? 'bg-primary-100 text-primary-700'
                   : 'text-gray-700 hover:bg-gray-100 hover:text-primary-700'
               }`}
@@ -174,7 +166,7 @@ const Layout: React.FC = () => {
               className="group flex items-center px-3 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 hover:text-primary-700 w-full mt-2"
               onClick={async () => {
                 try {
-                  await authService.logout();
+                  logout();
                   toast.success('Выход выполнен успешно');
                   navigate('/login');
                 } catch (error: any) {
@@ -222,6 +214,20 @@ const Layout: React.FC = () => {
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex flex-1"></div>
             <div className="flex items-center gap-x-4 lg:gap-x-6">
+              {/* Theme Switcher */}
+              <button
+                onClick={toggleTheme}
+                className="p-2 rounded-full hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                title={theme === 'dark' ? 'Светлая тема (Ctrl+L)' : 'Тёмная тема (Ctrl+D)'}
+                aria-label={theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему'}
+                tabIndex={0}
+              >
+                {theme === 'dark' ? (
+                  <Sun className="w-5 h-5 text-yellow-400" />
+                ) : (
+                  <Moon className="w-5 h-5 text-gray-700" />
+                )}
+              </button>
               {userInfo ? (
                 <span className="text-sm text-gray-700 font-medium">{userInfo.email}</span>
               ) : (

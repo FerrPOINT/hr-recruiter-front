@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Mic, Send, Loader2, CheckCircle, Mail, Globe, Users, Info, Headphones, Video, Briefcase, Phone } from 'lucide-react';
-import { useParams } from 'react-router-dom';
-import { apiService } from '../services/apiService';
+import { Mic, Send, Loader2, CheckCircle, Mail, Globe, Users, Info, Headphones, Video, Briefcase, Phone, Volume2 } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { candidateApiService } from '../services/candidateApiService';
 import { audioService } from '../services/audioService';
 // TODO: Add branding import when implementing brand styling
 // import type { Branding } from '../client/models/branding';
@@ -32,6 +32,7 @@ const icons = [<Globe className="h-6 w-6 text-orange-500" />, <Headphones classN
 
 const InterviewSession: React.FC = () => {
   const params = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [tempAudioUrl, setTempAudioUrl] = useState<string | null>(null);
   type InterviewStep = 'invite' | 'intro' | 'mic-test' | 'mic-test-done' | 'question' | 'final';
@@ -90,7 +91,7 @@ const InterviewSession: React.FC = () => {
           return;
         }
         console.log('Fetching interview data...');
-        const interviewData = await apiService.getInterview(parseInt(sessionId));
+        const interviewData = await candidateApiService.getInterview(parseInt(sessionId));
         console.log('Interview data received:', interviewData);
         if (!interviewData) {
           setError('Собеседование не найдено.');
@@ -290,6 +291,20 @@ const InterviewSession: React.FC = () => {
       setReadyForAnswer(true);
     } else {
       console.log('No questions available, ending interview');
+      
+      // Завершаем интервью в базе данных
+      try {
+        const interviewId = parseInt(params.sessionId || '0');
+        if (interviewId) {
+          console.log('Finishing interview with ID:', interviewId);
+          await candidateApiService.finishInterview(interviewId);
+          console.log('Interview finished successfully');
+        }
+      } catch (error) {
+        console.error('Error finishing interview:', error);
+        // Не показываем ошибку пользователю, так как интервью уже завершено локально
+      }
+      
       await pushMessagesWithDelay([
         { from: 'ai', text: 'Для этой вакансии пока нет вопросов. Интервью завершено.' }
       ]);
@@ -313,6 +328,23 @@ const InterviewSession: React.FC = () => {
       console.log('Calling transcribeInterviewAnswer for answer...');
       const transcript = await transcribeInterviewAnswer(audioBlob, currentQuestion);
       await pushMessagesWithDelay([{ from: 'user', text: transcript }]);
+      
+      // Проверяем, является ли это последним вопросом
+      const nextQuestionIndex = currentQuestion + 1;
+      if (nextQuestionIndex >= questions.length) {
+        // Это последний вопрос - завершаем интервью сразу после транскрибации
+        try {
+          const interviewId = parseInt(params.sessionId || '0');
+          if (interviewId) {
+            console.log('Finishing interview with ID:', interviewId);
+            await candidateApiService.finishInterview(interviewId);
+            console.log('Interview finished successfully');
+          }
+        } catch (error) {
+          console.error('Error finishing interview:', error);
+          // Не показываем ошибку пользователю, так как интервью уже завершено локально
+        }
+      }
     } else {
       console.log('No audio blob available for answer');
       await pushMessagesWithDelay([{ from: 'user', text: 'Ответ не записан' }]);
@@ -681,7 +713,21 @@ const InterviewSession: React.FC = () => {
   // --- MAIN RENDER ---
   return (
     <div className="min-h-screen bg-gray-900 py-8">
-      <div className="max-w-4xl mx-auto px-4 flex items-center justify-center min-h-[calc(100vh-4rem)]">
+      {/* Header with switch button */}
+      <div className="max-w-4xl mx-auto px-4 mb-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-white text-lg font-semibold">Обычное интервью</h1>
+          <button
+            onClick={() => navigate(`/elabs/${params.sessionId}`)}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
+          >
+            <Volume2 className="h-4 w-4" />
+            Переключиться на голосовое
+          </button>
+        </div>
+      </div>
+      
+      <div className="max-w-4xl mx-auto px-4 flex items-center justify-center min-h-[calc(100vh-8rem)]">
         {/* Show welcome screen */}
         {(step as InterviewStep) === 'invite' && renderWelcomeScreen()}
         {/* Main content */}
